@@ -1,0 +1,93 @@
+# Heatmap Meeting Finder — Core Functionality
+
+A self-hostable "When2Meet"-style tool where availability is visualized as a heatmap, but instead of manual clicking, each participant's grid auto-fills from their connected calendar (Google/Outlook/CalDAV/ICS). This doc is written as a spec + phased task list for a coding agent (e.g. Claude Code) to execute.
+
+---
+
+## 1. Product Summary
+
+**Core flow:**
+1. A logged-in user creates an event with a date range and time window (e.g. "next 2 weeks, 9am–6pm"). Events are either **private** (only invited users can see it) or **link-based** (any logged-in user with the link can join).
+2. The organizer gets a shareable link and can invite users by name (optional).
+3. Each participant opens the link (or finds the event in their list) and signs in. **Their calendar is configured once, per user, on their profile page** — they paste a private ICS URL or upload a one-off `.ics` file there, and they can set their **local sleep schedule** (a recurring daily sleep window). The tool auto-computes their free/busy blocks for every proposed window across all events they participate in, treating the sleep window as a base busy block. No manual clicking required (but manual override/edit per event should still be possible).
+4. The group view renders a heatmap: darker cells = more people free at that time.
+5. The organizer picks a slot and sets the final meeting time; the tool generates a downloadable `.ics` invite.
+
+**Design principle:** never store raw calendar event details — only computed free/busy intervals. This keeps the privacy footprint small and makes self-hosting more defensible to security-conscious users.
+
+---
+
+## 2. Calendar Integration Strategy (ICS-only)
+
+Single tier, deliberately:
+
+- **ICS URL** — user pastes their calendar's private ICS "secret address" (every mainstream provider exposes one: Google Calendar → Settings → "Secret address in iCal format"; Outlook/Office365 → "Publish a calendar" → ICS link; Apple/iCloud → public calendar share link; Nextcloud/Radicale/Baïkal → the calendar's `?export` URL). This is stored per-user (see ARCHITECTURE.md) and managed on the profile page. Document how to find this per-provider on the profile page with short screenshots/links.
+- **ICS file upload** — drag-and-drop `.ics` export, for anyone who'd rather not share a live URL, or whose provider doesn't expose one, or for one-off/offline use. Same parser as the URL path, just skips future polling.
+- Backend fetches the URL periodically (poll every N minutes — configurable via `ICS_POLL_INTERVAL_MINUTES`, default 30; respect `Cache-Control`/`ETag` headers where the provider sends them to avoid unnecessary refetches).
+- Parse VEVENTs → free/busy intervals only; discard `SUMMARY`/`DESCRIPTION`/`LOCATION` immediately after computing the busy range — never persist them.
+- Handle recurring events (`RRULE`) by expanding occurrences within a fixed lookahead horizon (`NOW()` → `NOW() + 90 days`) intersected with the union of the active event date ranges the user participates in — `ical.js`/`node-ical` both support this, don't hand-roll RRULE math.
+- No OAuth client registration, no CalDAV auth, no per-provider API integration — this is the whole calendar layer.
+
+**Timezone handling:** each user's time zone is auto-detected from their browser and stored in `users.tz_id`; the organizer's is copied to `events.tz_id` at creation (the event's canonical time zone). Absolute meeting timestamps are stored as **UTC** (ISO 8601, `YYYY-MM-DDTHH:mm:ssZ`), while recurring daily time windows are stored as **local wall-clock times-of-day** (`HH:mm:ss`) and expanded to UTC dynamically per date. Never store fixed numeric offsets like `+04:00` as the primary time zone reference — offsets shift with Daylight Saving Time (DST). The client renders time-axis labels, day columns, and available slots in each viewer's local time zone; daily availability windows defined by the organizer are converted dynamically to the viewer's local equivalent. The full conversion algorithm, DST edge cases, grid day-boundary rules, and ICS parsing rules are specified in `ARCHITECTURE.md` §3.
+
+---
+
+## 3. Heatmap UI
+
+- Grid: rows = time slots (configurable granularity: 15/30/60 min, default 15), columns = days in range. Rows and day columns are rendered in the viewer's local time zone; the organizer's daily availability window is projected onto the viewer's local axis (see `ARCHITECTURE.md` §3.3).
+- Cell color intensity = `count(free participants at this slot) / total participants`.
+- **Denominator / non-responders:** for **link events**, anyone who hasn't joined yet is excluded; anyone who has joined is treated as **free** by default (gaps in their calendar are assumed free). For **private events**, participants still holding a "pending invite" (`has_opened = 0`) are excluded from the grid entirely; once they've opened the invite they are counted as free by default. This same rule drives the "best slots" ranking.
+- **Viewing vs. joining (link events):** a logged-in user can view a link event's heatmap without joining; they are simply not counted until they join.
+- **Manual override editing:** the heatmap is read-only by default. An "edit" button enters editing mode. Clicking a cell marks it as a manual **busy** block; clicking an adjacent cell merges it into the same block; dragging expands a block into neighboring cells. A small toggle icon on a block flips it to a manual **free** override (busy: 0). Leaving editing mode saves the overrides. The grid pre-fills from the user's **sleep schedule** (their recurring daily sleep window, set on the profile page) and their calendar: sleep hours and calendar-busy hours start as busy, and the user can flip any of them to free (or add busy where they're actually unavailable).
+- Hover/tap a cell → list of who's free / who's busy / who hasn't responded.
+- Toggle: "heatmap" view vs "best slots" ranked list (top 5 slots sorted by availability %).
+- Manual override: participant can click cells to correct auto-detected availability (e.g. mark a "tentative" event as actually free). Overrides are stored separately from calendar blocks and take precedence where they overlap: a manual "busy" block marks the user busy even if the calendar shows free, and a manual "free" block marks the user free even if the calendar shows busy.
+- Blocking projection: any overlap between a busy block and a grid cell blocks the whole cell; gaps between blocks are assumed free.
+
+---
+
+## 4. Data Flows (implemented via loaders & form actions)
+
+Per the architecture doc, the app exposes **no raw API endpoints**. Each of the operations below is realized as a SvelteKit server `load` (for reads) or a **form action** (for writes), so the client never makes direct API calls. Aside from `/` (registration/login), all routes and actions require a logged-in session:
+
+```
+Reads (server loaders)
+GET   /                           registration / login (no landing page)
+GET   /events                     list of events the user is invited to or joined
+GET   /events/new                 create-event form
+GET   /events/:slug               public event + aggregated heatmap data (link events: any logged-in user; private: invited users only)
+GET   /events/:slug/join          join form for a participant
+GET   /profile                    current user's profile: picture upload + calendar integration management + sleep schedule
+GET   /sync-status                 current user's last-synced time / last error, for the "last synced" UI
+
+Writes (form actions, use:enhance)
+POST  register                    create account (unique username + password)
+POST  login                       authenticate with username + password (cookie session)
+POST  logout                      clear session
+POST  create-event                create event (private or link), returns slug + shareable link
+POST  invite                      invite a registered user by name (private events)
+POST  join                        join a link event as a participant
+POST  update-profile-picture      upload/resize a 32×32 profile picture
+POST  submit-ics-url              submit/update a live ICS URL (per-user, triggers immediate fetch + starts polling)
+POST  upload-ics-file             upload a one-off .ics file (parsed once, no polling)
+POST  update-sleep-schedule       set/clear the user's recurring daily sleep window (sleep_start / sleep_end, local times)
+POST  update-availability         manual overrides (per event)
+POST  finalize                    organizer picks a slot → generates a downloadable `.ics` invite
+```
+
+---
+
+## 5. Security & Privacy Notes (important for a self-host tool)
+
+- Encrypt stored ICS URLs at rest (AES-GCM, key from `ENCRYPTION_KEY`) — a private ICS address is a bearer secret for someone's whole calendar, treat it like a password.
+- Never log ICS URLs or raw calendar payloads.
+- Only persist computed busy/free intervals, not event titles/locations — call this out explicitly in the UI ("we never see your event details, only free/busy") since it's a strong selling point for an ICS-only, OAuth-free tool.
+- Rate-limit ICS fetch/polling per user to avoid hammering upstream calendar providers (and to avoid the tool itself being used to hit arbitrary URLs — validate the submitted URL is `https://` and parse it with the same ICS library used for reading, as basic SSRF hygiene since the server is fetching a user-supplied URL).
+- CSRF protection on all mutating form actions (SvelteKit's `use:enhance` uses the `Origin`-checked form post, and custom form actions carry an anti-CSRF token). Access is gated by the logged-in session cookie: private events are only viewable by invited users, and only the organizer can finalize.
+- Provide a `.env.example` — with ICS-only scope this is `DATABASE_PATH`, `ENCRYPTION_KEY` (hex, required), `BASE_URL`, `ICS_POLL_INTERVAL_MINUTES` (default 30), `EVENT_TTL_DAYS` (default 7). Only `https://` ICS URLs are accepted (no `http://`). No third-party app registration required anywhere in setup.
+
+---
+
+## 6. Build Plan
+
+The phased, box-tickable build plan lives in `PLAN.md`. Tick the boxes there as each task is completed.
