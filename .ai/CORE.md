@@ -88,6 +88,43 @@ POST  finalize                    organizer picks a slot → generates a downloa
 
 ---
 
-## 6. Build Plan
+## 6. Error Handling — Never Throw (Result Types)
+
+**Core principle: prevent throwing errors at all costs.** A thrown error is treated as an **unexpected error** — it is not handled by the app and will break the site. Therefore, throwing must be reserved exclusively for genuinely unexpected, unrecoverable conditions (a programming bug, a corrupted DB, an impossible invariant). Every *expected* failure — a network timeout, a malformed ICS file, a missing row, an invalid input, a provider returning 500 — must be represented as **data**, not as an exception.
+
+### Result type
+
+Every function and every data-loading mechanism returns a dedicated result type that carries **both** the explicit errors and the actual data:
+
+```ts
+// src/lib/result.ts
+
+export type Result<T, E = Error> =
+  | { ok: true; data: T }
+  | { ok: false; error: E };
+
+export const ok = <T, E = Error>(data: T): Result<T, E> => ({ ok: true, data });
+export const err = <T, E = Error>(error: E): Result<T, E> => ({ ok: false, error });
+```
+
+- **Every error is typed.** `E` is a concrete, named error type (a discriminated union of the possible failure modes for that operation), never `unknown` and never a bare `string`. No error remains untyped.
+- **Every function types its errors.** The signature of each function declares exactly which errors it can produce, so callers know and handle every possible failure up front. If a function can fail in several ways, `E` is a union of those specific error types.
+- **Callers must handle both branches.** Because the result is a discriminated union, TypeScript forces the caller to narrow on `ok` and handle the `error` case — there is no way to silently ignore a failure.
+
+### Where this applies
+
+- **Server loaders** (`+page.server.ts` / `+layout.server.ts` `load`): return a `Result`-shaped payload (or a discriminated union of success/error states) down to the component, so the UI renders the appropriate error state instead of crashing.
+- **Form actions:** validate and return typed errors to the form (via `fail(...)` with typed fields), never throw for expected validation failures.
+- **Data access / DB queries:** wrap reads and writes so missing rows, constraint violations, and connection failures come back as typed errors.
+- **ICS fetching & parsing:** network failures, timeouts, invalid URLs, and malformed calendar data are all expected outcomes — each is a typed error, never a throw.
+- **Calendar sync / background jobs:** record failures as typed errors in the `sync_jobs` table for the "last synced / last error" UI.
+
+### What may still throw
+
+Only truly unexpected conditions may throw, and they should be caught at the app boundary (a top-level error handler / SvelteKit `+error.svelte`) so the site degrades gracefully rather than crashing outright. If a throw is ever caught, it must be logged as an unexpected error — it is a bug to fix, not a control-flow path.
+
+---
+
+## 7. Build Plan
 
 The phased, box-tickable build plan lives in `PLAN.md`. Tick the boxes there as each task is completed.
