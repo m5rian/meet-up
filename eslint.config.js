@@ -48,6 +48,10 @@ export default defineConfig(
 	},
 	{
 		// Other config here (e.g. Svelte rules).
-		rules: {}
+		rules: {
+			// SvelteKit's `redirect()` and `error()` helpers are designed to be thrown
+			// and are not `Error` instances — this rule is a false positive for them.
+			'@typescript-eslint/only-throw-error': 'off'
+		}
 	}
 );

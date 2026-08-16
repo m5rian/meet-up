@@ -17,13 +17,13 @@ Tick a box when a task is done. Phases are meant to be completed in order. Full 
 
 ## Phase 1 — Accounts & core event flow (no calendar integration yet)
 
-- [ ] User accounts: register/login with **unique** username + password (argon2id, cookie session), profile picture (stored as a blob, resized to 32×32 on upload).
-- [ ] Profile page (`/profile`): upload/change the 32×32 profile picture, manage the user's own calendar integration (ICS URL or one-off file), and set the user's **sleep schedule** (recurring daily sleep window, `sleep_start` / `sleep_end` local times). The sleep window acts as a base busy block for the auto calendar and pre-fills the manual-override grid.
-- [ ] Create event (private or link), get shareable link. Creating an event auto-adds the organizer as a participant.
-- [ ] Invite registered users by name (private events) via a picker showing users + profile pictures; invited-but-not-opened participants show as "pending invite".
-- [ ] Join a link event as a participant; manual click-to-mark availability grid (this alone is a working When2Meet clone — a good milestone to validate the UI). Link-event participants who have joined but not responded are treated as free; private-event pending invites are excluded from the grid.
-- [ ] Aggregated heatmap rendering.
-- [ ] Events list: show events the user is invited to or joined.
+- [x] User accounts: register/login with **unique** username + password (argon2id, cookie session), profile picture (stored as a blob, resized to 32×32 on upload).
+- [x] Profile page (`/profile`): upload/change the 32×32 profile picture, manage the user's own calendar integration (ICS URL or one-off file), and set the user's **sleep schedule** (recurring daily sleep window, `sleep_start` / `sleep_end` local times). The sleep window acts as a base busy block for the auto calendar and pre-fills the manual-override grid.
+- [x] Create event (private or link), get shareable link. Creating an event auto-adds the organizer as a participant.
+- [x] Invite registered users by name (private events) via a picker showing users + profile pictures; invited-but-not-opened participants show as "pending invite".
+- [x] Join a link event as a participant; manual click-to-mark availability grid (this alone is a working When2Meet clone — a good milestone to validate the UI). Link-event participants who have joined but not responded are treated as free; private-event pending invites are excluded from the grid.
+- [x] Aggregated heatmap rendering.
+- [x] Events list: show events the user is invited to or joined.
 
 ## Phase 2 — ICS integration
 

@@ -100,6 +100,21 @@ export const manualBlocks = sqliteTable('manual_blocks', {
 	busy: integer('busy', { mode: 'boolean' }).notNull()
 });
 
+/** Cookie sessions. The raw token is stored in the cookie; only its hash is persisted. */
+export const sessions = sqliteTable('sessions', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	token_hash: text('token_hash').notNull().unique(),
+	expires_at: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+	created_at: integer('created_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
 /** One row per user: last sync attempt / last success / last error. */
 export const syncJobs = sqliteTable('sync_jobs', {
 	user_id: text('user_id')
