@@ -1,0 +1,43 @@
+# Sample systemd unit for running the built Find-Time server.
+#
+# Operators should copy this file to /etc/systemd/system/find-time.service,
+# adjust User, WorkingDirectory and Environment to match their deployment,
+# then:
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now find-time
+#
+# Prerequisites:
+#   - node >= 22 on PATH for the service user
+#   - The app must be built (run sudo -u <user> ./start.sh or npm ci && npm run build first)
+#   - ENCRYPTION_KEY (hex) MUST be provided via the EnvironmentFile.
+
+[Unit]
+Description=Find-Time heatmap meeting finder
+After=network.target
+
+[Service]
+Type=simple
+User=findtime
+Group=findtime
+# Directory containing the built app (node build).
+WorkingDirectory=/opt/find-time
+ExecStart=/usr/bin/env node build
+# Load environment variables from this file (see .env.example for the format).
+EnvironmentFile=/opt/find-time/.env
+# Host / port handled by the app via env, e.g.:
+Environment=HOST=0.0.0.0
+Environment=PORT=3000
+Restart=on-failure
+RestartSec=5
+
+# Loose sandboxing basics for a single process.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Allow the app to write its SQLite DB inside the working directory.
+ReadWritePaths=/opt/find-time
+
+[Install]
+WantedBy=multi-user.target

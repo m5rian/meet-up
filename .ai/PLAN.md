@@ -6,14 +6,14 @@ Tick a box when a task is done. Phases are meant to be completed in order. Full 
 
 ## Phase 0 — Scaffold
 
-- [ ] `npm create svelte@latest` (SvelteKit, TypeScript, Tailwind, **ESLint**, **Prettier**), configured with the Node adapter (`@sveltejs/adapter-node`) so it builds to a plain `node build/index.js` server.
-- [ ] Set up Drizzle + SQLite (`better-sqlite3` or `libsql`), enable WAL mode, write initial migration for the schema in the architecture doc.
-- [ ] Configure linting & formatting:
-  - [ ] `eslint.config.js` — enable `typescript-eslint` strict-type-checked config, `eslint-plugin-svelte` for template linting, and an allowlist for `any`/`!` assertions (acceptable only in DB-migration and ICS-parsing internals where types are inherently dynamic).
-  - [ ] `prettier.config.js` — `plugins: ['prettier-plugin-svelte', 'prettier-plugin-tailwindcss']`, `svelteSortOrder: "options-scripts-markup-styles"`, `tailwindPreserveWhitespace: true` (avoids Tailwind's default removal of whitespace in class strings).
-  - [ ] `package.json` scripts — `lint` (runs `eslint src/`), `format` (runs `prettier --write src/`), `format:check` (runs `prettier --check src/`).
-  - [ ] Add a **pre-commit hook** via `husky` + `lint-staged` that runs `prettier --check` and `eslint` on staged files — keeps commits clean even for solo development.
-- [ ] `start.sh` (or an npm script) that runs migrations then starts the server, plus a sample `systemd` unit file in the repo for operators to copy.
+- [x] `npm create svelte@latest` (SvelteKit, TypeScript, Tailwind, **ESLint**, **Prettier**), configured with the Node adapter (`@sveltejs/adapter-node`) so it builds to a plain `node build/index.js` server.
+- [x] Set up Drizzle + SQLite (`better-sqlite3` or `libsql`), enable WAL mode, write initial migration for the schema in the architecture doc.
+- [x] Configure linting & formatting:
+  - [x] `eslint.config.js` — enable `typescript-eslint` strict-type-check config, `eslint-plugin-svelte` for template linting, and an allowlist for `any`/`!` assertions (acceptable only in DB-migration and ICS-parsing internals where types are inherently dynamic).
+  - [x] `prettier.config.js` — `plugins: ['prettier-plugin-svelte', 'prettier-plugin-tailwindcss']`, `svelteSortOrder: "options-scripts-markup-styles"`, `tailwindPreserveWhitespace: true` (avoids Tailwind's default removal of whitespace in class strings).
+  - [x] `package.json` scripts — `lint` (runs `eslint src/`), `format` (runs `prettier --write src/`), `format:check` (runs `prettier --check src/`).
+  - [x] Add a **pre-commit hook** via `husky` + `lint-staged` that runs `prettier --check` and `eslint` on staged files — keeps commits clean even for solo development.
+- [x] `start.sh` (or an npm script) that runs migrations then starts the server, plus a sample `systemd` unit file in the repo for operators to copy.
 
 ## Phase 1 — Accounts & core event flow (no calendar integration yet)
 
