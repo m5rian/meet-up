@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { DateTime } from 'luxon';
 	import type { HeatmapData, HeatmapSlot } from '$lib/types';
 	import { Button } from './';
 	import { EditIcon, CloseIcon } from './icons';
@@ -21,6 +22,24 @@
 		return String(row) + ':' + String(day);
 	}
 
+	// The cell's UTC interval = viewer-local midnight of that day + row offset.
+	function cellInterval(row: number, day: number): [string, string] {
+		const dayStart = heatmap.days[day].start_ts;
+		const start = addMinutesUtc(dayStart, heatmap.rows[row].offset_minutes);
+		const end = addMinutesUtc(
+			dayStart,
+			heatmap.rows[row].offset_minutes + heatmap.rows[row].duration_minutes
+		);
+		return [start, end];
+	}
+
+	function addMinutesUtc(ts: string, minutes: number): string {
+		const iso = DateTime.fromISO(ts, { zone: 'utc' })
+			.plus({ minutes })
+			.toISO({ suppressMilliseconds: true });
+		return iso ?? ts;
+	}
+
 	// The cells that are busy "by default" (sleep ∪ calendar), used to compute
 	// the manual override deltas on save.
 	function autoBusyCells(): Record<string, boolean> {
@@ -28,8 +47,7 @@
 		const blocks = [...heatmap.my_sleep_blocks, ...heatmap.my_calendar_blocks];
 		for (let r = 0; r < heatmap.rows.length; r++) {
 			for (let d = 0; d < heatmap.days.length; d++) {
-				const cellStart = heatmap.rows[r].start_ts;
-				const cellEnd = heatmap.rows[r].end_ts;
+				const [cellStart, cellEnd] = cellInterval(r, d);
 				if (blocks.some(([s, e]) => s < cellEnd && cellStart < e)) {
 					map[cellKey(r, d)] = true;
 				}
@@ -43,8 +61,7 @@
 		const map: Record<string, boolean> = {};
 		for (let r = 0; r < heatmap.rows.length; r++) {
 			for (let d = 0; d < heatmap.days.length; d++) {
-				const cellStart = heatmap.rows[r].start_ts;
-				const cellEnd = heatmap.rows[r].end_ts;
+				const [cellStart, cellEnd] = cellInterval(r, d);
 				if (heatmap.my_busy_blocks.some(([s, e]) => s < cellEnd && cellStart < e)) {
 					map[cellKey(r, d)] = true;
 				}
@@ -67,14 +84,14 @@
 		const manualFree: [string, string][] = [];
 		for (const key of Object.keys(busyCells)) {
 			if (busyCells[key] && !auto[key]) {
-				const [r] = key.split(':').map(Number);
-				manualBusy.push([heatmap.rows[r].start_ts, heatmap.rows[r].end_ts]);
+				const [r, d] = key.split(':').map(Number);
+				manualBusy.push(cellInterval(r, d));
 			}
 		}
 		for (const key of Object.keys(auto)) {
 			if (!busyCells[key]) {
-				const [r] = key.split(':').map(Number);
-				manualFree.push([heatmap.rows[r].start_ts, heatmap.rows[r].end_ts]);
+				const [r, d] = key.split(':').map(Number);
+				manualFree.push(cellInterval(r, d));
 			}
 		}
 		const form = event.currentTarget as HTMLFormElement;
@@ -151,7 +168,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each heatmap.rows as row, r (row.start_ts)}
+				{#each heatmap.rows as row, r (row.offset_minutes)}
 					<tr>
 						<th
 							class="sticky left-0 bg-white px-2 py-1 text-right text-xs font-medium text-gray-500"

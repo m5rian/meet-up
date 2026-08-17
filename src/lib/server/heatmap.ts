@@ -16,7 +16,7 @@ import type {
 	HeatmapSlot,
 	ParticipantSummary
 } from '$lib/types';
-import type { CalendarDate, TimeOfDay } from './time';
+import type { CalendarDate, TimeOfDay, UtcTimestamp } from './time';
 import {
 	addDays,
 	expandDailyWindow,
@@ -219,8 +219,12 @@ export function buildHeatmap(event: EventRow, viewerId: string, viewerTzId: stri
 	const cells: HeatmapSlot[][] = [];
 	for (const row of rows) {
 		const rowCells: HeatmapSlot[] = [];
-		for (let di = 0; di < days.length; di++) {
-			const slot: UtcInterval = { start_ts: row.start_ts, end_ts: row.end_ts };
+		for (const day of days) {
+			// The cell's actual UTC interval = viewer-local midnight of that day + row offset.
+			const slot: UtcInterval = {
+				start_ts: addMinutesUtc(day.start_ts, row.offset_minutes),
+				end_ts: addMinutesUtc(day.start_ts, row.offset_minutes + row.duration_minutes)
+			};
 			const free: ParticipantSummary[] = [];
 			const busy: ParticipantSummary[] = [];
 			const notResponded: ParticipantSummary[] = [];
@@ -315,37 +319,41 @@ function buildDays(start: CalendarDate, end: CalendarDate, viewerTzId: string): 
 	return days;
 }
 
-/** Build the time rows in the viewer's local time zone. */
+/**
+ * Build the time rows for a single day, in the viewer's local time zone.
+ *
+ * Rows are expressed as offsets from the viewer's local midnight so the same
+ * clock times apply to every day column (the day columns are handled
+ * separately by `buildDays`).
+ */
 function buildRows(event: EventRow, viewerTzId: string): HeatmapRow[] {
 	const granularity = event.slot_granularity_minutes;
 	const rows: HeatmapRow[] = [];
-	// Iterate over the event's date range in the viewer's local zone, generating
-	// slots from 00:00 to 24:00 each day. To keep the grid manageable we only
-	// generate rows for the organizer's availability window projected onto the
-	// viewer's axis, but for simplicity we generate a full 24h grid.
-	const startDate = event.date_range_start;
-	const endDate = event.date_range_end;
-	let date = startDate;
-	while (date <= endDate) {
-		const dayStart = localToUtc(date, '00:00:00', viewerTzId);
-		const dayEnd = localToUtc(addDays(date, 1), '00:00:00', viewerTzId);
-		let t = dayStart;
-		while (t < dayEnd) {
-			const endIso = DateTime.fromISO(t, { zone: 'utc' })
-				.plus({ minutes: granularity })
-				.toISO({ suppressMilliseconds: true });
-			if (!endIso) break;
-			const endTs = endIso;
-			rows.push({
-				start_ts: t,
-				end_ts: endTs,
-				label: formatTimeInZone(t, viewerTzId)
-			});
-			t = endTs;
-		}
-		date = addDays(date, 1);
+	// Use the first day of the range as the reference date for generating labels.
+	const refDate = event.date_range_start;
+	const dayStart = localToUtc(refDate, '00:00:00', viewerTzId);
+	const dayEnd = localToUtc(addDays(refDate, 1), '00:00:00', viewerTzId);
+	let offset = 0;
+	while (offset < 24 * 60) {
+		const slotStart = addMinutesUtc(dayStart, offset);
+		if (slotStart >= dayEnd) break;
+		rows.push({
+			offset_minutes: offset,
+			duration_minutes: granularity,
+			label: formatTimeInZone(slotStart, viewerTzId)
+		});
+		offset += granularity;
 	}
 	return rows;
+}
+
+/** Add a number of minutes to a UTC ISO timestamp. */
+function addMinutesUtc(ts: UtcTimestamp, minutes: number): UtcTimestamp {
+	const iso = DateTime.fromISO(ts, { zone: 'utc' })
+		.plus({ minutes })
+		.toISO({ suppressMilliseconds: true });
+	if (!iso) throw new Error(`Failed to add minutes to ${ts}`);
+	return iso;
 }
 
 /** Project the organizer's daily availability window onto the viewer's local axis. */

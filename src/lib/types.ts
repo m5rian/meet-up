@@ -82,10 +82,10 @@ export interface HeatmapDay {
 
 /** A row (time slot) in the heatmap grid. */
 export interface HeatmapRow {
-	/** Slot start as a UTC ISO timestamp. */
-	start_ts: string;
-	/** Slot end as a UTC ISO timestamp. */
-	end_ts: string;
+	/** Minutes from the viewer's local midnight to this slot's start. */
+	offset_minutes: number;
+	/** Slot duration in minutes (the event's granularity). */
+	duration_minutes: number;
 	/** Display label, e.g. '09:00'. */
 	label: string;
 }
