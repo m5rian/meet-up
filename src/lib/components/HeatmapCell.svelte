@@ -27,10 +27,9 @@
 	<div
 		role="gridcell"
 		tabindex="0"
-		class="h-8 w-full"
+		class="h-8 w-full bg-green-800"
 		onmouseenter={onHover}
 		onmouseleave={onLeave}
-		style="background-color: rgb({255 - Math.round(slot.free_ratio * 255)} 255 {255 -
-			Math.round(slot.free_ratio * 255)})"
+		style="opacity: {slot.free_ratio}"
 	></div>
 {/if}
