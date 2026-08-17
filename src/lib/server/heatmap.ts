@@ -143,16 +143,26 @@ function loadParticipants(
 				.select({
 					user_id: calendarBlocks.user_id,
 					start_ts: calendarBlocks.start_ts,
-					end_ts: calendarBlocks.end_ts
+					end_ts: calendarBlocks.end_ts,
+					is_floating: calendarBlocks.is_floating
 				})
 				.from(calendarBlocks)
 				.where(inArray(calendarBlocks.user_id, userIds))
 				.all()
 		: [];
+	// Floating blocks are stored as wall-clock times; convert them to UTC in the
+	// calendar owner's time zone so they can be compared against the UTC grid
+	// slots (ARCHITECTURE.md §3.4).
+	const tzByUser = new Map(userRows.map((u) => [u.id, u.tz_id ?? 'UTC']));
 	const calendarByUser = new Map<string, UtcInterval[]>();
 	for (const c of calendarRows) {
 		const list = calendarByUser.get(c.user_id) ?? [];
-		list.push({ start_ts: c.start_ts, end_ts: c.end_ts });
+		if (c.is_floating) {
+			const converted = floatingToUtc(c.start_ts, c.end_ts, tzByUser.get(c.user_id) ?? 'UTC');
+			if (converted) list.push(converted);
+		} else {
+			list.push({ start_ts: c.start_ts, end_ts: c.end_ts });
+		}
 		calendarByUser.set(c.user_id, list);
 	}
 
@@ -345,6 +355,26 @@ function buildRows(event: EventRow, viewerTzId: string): HeatmapRow[] {
 		offset += granularity;
 	}
 	return rows;
+}
+
+/**
+ * Convert a floating (wall-clock) calendar block to a UTC interval in the
+ * calendar owner's time zone. Floating times carry no offset, so they are
+ * interpreted as local wall-clock times in `tzId` (ARCHITECTURE.md §3.4).
+ * Returns null when the wall-clock strings are malformed.
+ */
+function floatingToUtc(startWall: string, endWall: string, tzId: string): UtcInterval | null {
+	const start = wallClockToUtc(startWall, tzId);
+	const end = wallClockToUtc(endWall, tzId);
+	if (!start || !end) return null;
+	return { start_ts: start, end_ts: end };
+}
+
+/** Convert a 'YYYY-MM-DDTHH:mm:ss' wall-clock string to a UTC timestamp in `tzId`. */
+function wallClockToUtc(wall: string, tzId: string): UtcTimestamp | null {
+	const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})$/.exec(wall);
+	if (!match) return null;
+	return localToUtc(match[1], match[2], tzId);
 }
 
 /** Add a number of minutes to a UTC ISO timestamp. */

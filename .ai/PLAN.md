@@ -27,11 +27,11 @@ Tick a box when a task is done. Phases are meant to be completed in order. Full 
 
 ## Phase 2 — ICS integration
 
-- [ ] ICS URL submission (per-user, on the profile page) with immediate fetch + background polling job (in-process scheduler, writes to `sync_jobs`).
-- [ ] ICS file upload parsing (one-off, no polling; uploaded on the profile page).
-- [ ] Convert VEVENTs → busy intervals (expand `RRULE` recurrences within range), merge with manual overrides (calendar data pre-fills, manual clicks take precedence).
-- [ ] Merge the user's **sleep schedule** as a base busy block into the availability computation (union with calendar blocks, minus manual free overrides), expanded to UTC per date with the same DST-aware logic as event time windows.
-- [ ] Sync-status UI: "last synced Xm ago" / "sync failed — check your ICS URL."
+- [x] ICS URL submission (per-user, on the profile page) with immediate fetch + background polling job (in-process scheduler, writes to `sync_jobs`).
+- [x] ICS file upload parsing (one-off, no polling; uploaded on the profile page).
+- [x] Convert VEVENTs → busy intervals (expand `RRULE` recurrences within range), merge with manual overrides (calendar data pre-fills, manual clicks take precedence).
+- [x] Merge the user's **sleep schedule** as a base busy block into the availability computation (union with calendar blocks, minus manual free overrides), expanded to UTC per date with the same DST-aware logic as event time windows.
+- [x] Sync-status UI: "last synced Xm ago" / "sync failed — check your ICS URL."
 
 ## Phase 3 — Finalize & invite
 

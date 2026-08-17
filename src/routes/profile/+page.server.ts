@@ -2,12 +2,25 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { users } from '$lib/server/db/schema';
+import { calendarBlocks, users } from '$lib/server/db/schema';
 import { resizeProfilePicture } from '$lib/server/picture';
 import { decryptSecret } from '$lib/server/crypto';
 import { isTimeOfDay } from '$lib/server/time';
 import { getFormString } from '$lib/server/form';
 import type { UserProfile } from '$lib/types';
+import {
+	clearUserIcsUrl,
+	fetchIcsBlocks,
+	getSyncStatus,
+	recordSyncFailure,
+	recordSyncSuccess,
+	replaceCalendarBlocks,
+	setUserIcsUrl,
+	syncErrorMessage,
+	parseIcsFile,
+	validateIcsUrl,
+	type IcsSource
+} from '$lib/server/calendar/sync';
 
 export const load: PageServerLoad = ({ locals }) => {
 	if (!locals.user) throw redirect(302, '/');
@@ -20,7 +33,8 @@ export const load: PageServerLoad = ({ locals }) => {
 			tz_id: users.tz_id,
 			sleep_start: users.sleep_start,
 			sleep_end: users.sleep_end,
-			ics_url_enc: users.ics_url_enc
+			ics_url_enc: users.ics_url_enc,
+			ics_source: users.ics_source
 		})
 		.from(users)
 		.where(eq(users.id, locals.user.id))
@@ -36,10 +50,12 @@ export const load: PageServerLoad = ({ locals }) => {
 		sleep_end: row.sleep_end
 	};
 
-	// Decrypt the ICS URL for display (Phase 2 will use it; for now just expose whether set).
+	// Decrypt the ICS URL for display (never log it).
 	const icsUrl = row.ics_url_enc ? decryptSecret(row.ics_url_enc) : null;
+	const icsSource: IcsSource | null = row.ics_source;
+	const syncStatus = getSyncStatus(locals.user.id);
 
-	return { profile, icsUrl };
+	return { profile, icsUrl, icsSource, syncStatus };
 };
 
 export const actions: Actions = {
@@ -104,5 +120,73 @@ export const actions: Actions = {
 			.where(eq(users.id, locals.user.id))
 			.run();
 		return { sleepSaved: true };
+	},
+
+	'submit-ics-url': async ({ request, locals }) => {
+		if (!locals.user) throw redirect(302, '/');
+		const form = await request.formData();
+		const url = getFormString(form, 'ics_url');
+
+		const validated = validateIcsUrl(url);
+		if (!validated.ok) {
+			return fail(400, { icsError: syncErrorMessage(validated.error) });
+		}
+
+		// Immediate fetch + parse before saving, so the user gets instant feedback.
+		const fetched = await fetchIcsBlocks(validated.data);
+		if (!fetched.ok) {
+			return fail(400, { icsError: syncErrorMessage(fetched.error) });
+		}
+
+		const stored = setUserIcsUrl(locals.user.id, validated.data);
+		if (!stored.ok) {
+			return fail(400, { icsError: syncErrorMessage(stored.error) });
+		}
+
+		const written = replaceCalendarBlocks(locals.user.id, fetched.data);
+		if (!written.ok) {
+			recordSyncFailure(locals.user.id, syncErrorMessage(written.error));
+			return fail(400, { icsError: syncErrorMessage(written.error) });
+		}
+
+		recordSyncSuccess(locals.user.id);
+		return { icsSaved: true };
+	},
+
+	'upload-ics-file': async ({ request, locals }) => {
+		if (!locals.user) throw redirect(302, '/');
+		const form = await request.formData();
+		const file = form.get('ics_file');
+		if (!(file instanceof File) || file.size === 0) {
+			return fail(400, { icsError: 'Choose an .ics file to upload.' });
+		}
+
+		const buffer = Buffer.from(await file.arrayBuffer());
+		const parsed = parseIcsFile(buffer);
+		if (!parsed.ok) {
+			return fail(400, { icsError: syncErrorMessage(parsed.error) });
+		}
+
+		// Uploading a file clears the live ICS URL (mutually exclusive, ARCHITECTURE.md §2).
+		clearUserIcsUrl(locals.user.id);
+
+		const written = replaceCalendarBlocks(locals.user.id, parsed.data);
+		if (!written.ok) {
+			recordSyncFailure(locals.user.id, syncErrorMessage(written.error));
+			return fail(400, { icsError: syncErrorMessage(written.error) });
+		}
+
+		recordSyncSuccess(locals.user.id);
+		return { icsSaved: true };
+	},
+
+	'disconnect-calendar': ({ locals }) => {
+		if (!locals.user) throw redirect(302, '/');
+		db.update(users)
+			.set({ ics_url_enc: null, ics_source: null })
+			.where(eq(users.id, locals.user.id))
+			.run();
+		db.delete(calendarBlocks).where(eq(calendarBlocks.user_id, locals.user.id)).run();
+		return { icsSaved: true };
 	}
 };

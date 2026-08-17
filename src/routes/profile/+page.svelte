@@ -1,16 +1,26 @@
 <script lang="ts">
-	import type { UserProfile } from '$lib/types';
-	import { Avatar, ProfilePictureForm, SleepScheduleForm } from '$lib/components';
+	import type { SyncStatus, UserProfile } from '$lib/types';
+	import {
+		Avatar,
+		ProfilePictureForm,
+		SleepScheduleForm,
+		CalendarIntegrationForm
+	} from '$lib/components';
 
 	let {
 		data
 	}: {
 		data: {
 			profile: UserProfile;
+			icsUrl: string | null;
+			icsSource: 'url' | 'file' | null;
+			syncStatus: SyncStatus | null;
 			pictureError?: string;
 			pictureSaved?: boolean;
 			sleepError?: string;
 			sleepSaved?: boolean;
+			icsError?: string;
+			icsSaved?: boolean;
 		};
 	} = $props();
 </script>
@@ -53,9 +63,14 @@
 
 	<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-lg font-semibold text-gray-900">Calendar</h2>
-		<p class="text-sm text-gray-500">
-			Calendar integration (ICS URL or file upload) arrives in a later phase. Your availability is
-			currently based on your sleep schedule and manual selections.
-		</p>
+		{#if data.icsSaved}
+			<div class="mb-3 rounded-md bg-green-50 p-3 text-sm text-green-700">Calendar updated.</div>
+		{/if}
+		<CalendarIntegrationForm
+			icsUrl={data.icsUrl}
+			icsSource={data.icsSource}
+			syncStatus={data.syncStatus}
+			error={data.icsError}
+		/>
 	</section>
 </div>

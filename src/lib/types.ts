@@ -16,6 +16,13 @@ export interface UserProfile {
 	sleep_end: string | null; // local wall-clock 'HH:mm:ss'
 }
 
+/** The current user's calendar sync status (from the `sync_jobs` table). */
+export interface SyncStatus {
+	last_success_at: Date | null;
+	last_attempt_at: Date | null;
+	last_error: string | null;
+}
+
 /** A user as shown in the invite picker (username + picture). */
 export interface UserSummary {
 	id: string;

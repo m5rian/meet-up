@@ -10,3 +10,5 @@ export { default as SleepScheduleForm } from './SleepScheduleForm.svelte';
 export { default as EventCard } from './EventCard.svelte';
 export { default as InvitePicker } from './InvitePicker.svelte';
 export { default as ProfilePictureForm } from './ProfilePictureForm.svelte';
+export { default as CalendarIntegrationForm } from './CalendarIntegrationForm.svelte';
+export { default as SyncStatusIndicator } from './SyncStatusIndicator.svelte';
