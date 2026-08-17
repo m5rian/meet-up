@@ -5,6 +5,7 @@
 	import { Button } from './';
 	import { EditIcon, CloseIcon } from './icons';
 	import ParticipantList from './ParticipantList.svelte';
+	import HeatmapGrid from './HeatmapGrid.svelte';
 
 	interface Props {
 		heatmap: HeatmapData;
@@ -156,56 +157,14 @@
 		</div>
 	{/if}
 
-	<div class="overflow-x-auto">
-		<table class="border-collapse">
-			<thead>
-				<tr>
-					<th class="sticky left-0 bg-white px-2 py-1 text-left text-xs font-medium text-gray-500"
-					></th>
-					{#each heatmap.days as day (day.date)}
-						<th class="px-1 py-1 text-center text-xs font-medium text-gray-500">{day.label}</th>
-					{/each}
-				</tr>
-			</thead>
-			<tbody>
-				{#each heatmap.rows as row, r (row.offset_minutes)}
-					<tr>
-						<th
-							class="sticky left-0 bg-white px-2 py-1 text-right text-xs font-medium text-gray-500"
-						>
-							{row.label}
-						</th>
-						{#each heatmap.days as day, d (day.date)}
-							{#if editing}
-								<td
-									class="h-4 w-8 cursor-pointer border border-gray-200 transition-colors {busyCells[
-										cellKey(r, d)
-									]
-										? 'bg-indigo-500 hover:bg-indigo-400'
-										: 'bg-white hover:bg-indigo-100'}"
-									role="gridcell"
-									aria-label="Toggle availability"
-									onclick={() => {
-										toggleCell(r, d);
-									}}
-								></td>
-							{:else}
-								<td
-									class="h-4 w-8 border border-gray-100"
-									role="gridcell"
-									onmouseenter={() => (hovered = { row: r, day: d })}
-									onmouseleave={() => (hovered = null)}
-									style="background-color: rgb({255 -
-										Math.round(heatmap.cells[r][d].free_ratio * 255)} 255 {255 -
-										Math.round(heatmap.cells[r][d].free_ratio * 255)})"
-								></td>
-							{/if}
-						{/each}
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
+	<HeatmapGrid
+		{heatmap}
+		{editing}
+		{busyCells}
+		onToggle={toggleCell}
+		onHover={(row: number, day: number) => (hovered = { row, day })}
+		onLeave={() => (hovered = null)}
+	/>
 
 	{#if hoveredSlotValue}
 		<ParticipantList slot={hoveredSlotValue} />
