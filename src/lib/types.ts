@@ -126,6 +126,8 @@ export interface HeatmapData {
 	rows: HeatmapRow[];
 	/** cells[rowIndex][dayIndex] */
 	cells: HeatmapSlot[][];
+	/** The counted participants shown in the grid, used for the member list. */
+	participants: ParticipantSummary[];
 	organizer_window: OrganizerWindow | null;
 	/** The current user's manual busy blocks for this event, as [start,end] UTC ISO pairs. */
 	my_manual_busy: [string, string][];

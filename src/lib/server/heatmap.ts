@@ -302,6 +302,7 @@ export function buildHeatmap(event: EventRow, viewerId: string, viewerTzId: stri
 		days,
 		rows,
 		cells,
+		participants: counted.map((a) => a.participant),
 		organizer_window: organizerWindow,
 		my_manual_busy: myManualBusy.map((b) => [b.start_ts, b.end_ts]),
 		my_manual_free: myManualFree.map((b) => [b.start_ts, b.end_ts]),

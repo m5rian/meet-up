@@ -18,7 +18,7 @@
 	}
 </script>
 
-<div class="overflow-x-auto">
+<div class="grow overflow-x-auto">
 	<div
 		class="grid w-full"
 		style="grid-template-columns: auto repeat({heatmap.days.length}, minmax(0, 1fr));"

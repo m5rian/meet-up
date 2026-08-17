@@ -1,36 +1,40 @@
 <script lang="ts">
-	import type { HeatmapSlot } from '$lib/types';
+	import type { ParticipantSummary } from '$lib/types';
+	import Avatar from './Avatar.svelte';
 
 	interface Props {
-		slot: HeatmapSlot;
+		participants: ParticipantSummary[];
+		/** Participant ids that are unavailable in the hovered slot; dimmed when set. */
+		unavailableIds?: Set<string>;
+		emptyText?: string;
+		class?: string;
 	}
 
-	let { slot }: Props = $props();
-
-	function names(participants: { username: string }[]): string {
-		if (participants.length === 0) return 'Nobody';
-		return participants.map((p) => p.username).join(', ');
-	}
+	let {
+		participants,
+		unavailableIds = new Set(),
+		emptyText = 'No members yet',
+		class: className = ''
+	}: Props = $props();
 </script>
 
-<div class="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
-	<div class="mb-2 text-sm font-medium text-gray-900">
-		{Math.round(slot.free_ratio * 100)}% free
-	</div>
-	<div class="space-y-2 text-sm">
-		<div>
-			<span class="font-medium text-green-700">Free:</span>
-			<span class="text-gray-700">{names(slot.free)}</span>
-		</div>
-		<div>
-			<span class="font-medium text-red-700">Busy:</span>
-			<span class="text-gray-700">{names(slot.busy)}</span>
-		</div>
-		{#if slot.not_responded.length > 0}
-			<div>
-				<span class="font-medium text-gray-500">Not responded:</span>
-				<span class="text-gray-500">{names(slot.not_responded)}</span>
-			</div>
-		{/if}
-	</div>
+<div class="p-3 {className}">
+	<div class="mb-2 text-sm font-medium text-gray-900">Members</div>
+	{#if participants.length === 0}
+		<p class="text-sm text-gray-500">{emptyText}</p>
+	{:else}
+		<ul class="space-y-1">
+			{#each participants as participant (participant.id)}
+				{@const dimmed = unavailableIds.has(participant.id)}
+				<li
+					class="flex items-center gap-2 text-sm transition-opacity {dimmed
+						? 'opacity-40'
+						: 'opacity-100'}"
+				>
+					<Avatar src={participant.profile_picture} username={participant.username} size="sm" />
+					<span class="truncate text-gray-700">{participant.username}</span>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </div>

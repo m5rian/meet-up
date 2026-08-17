@@ -108,6 +108,14 @@
 	}
 
 	let hoveredSlotValue = $derived(hoveredSlot());
+
+	// The participant ids that are unavailable in the hovered slot (busy or not
+	// responded). When nothing is hovered, all members stay fully visible.
+	let unavailableIds = $derived.by(() => {
+		const slot = hoveredSlotValue;
+		if (!slot) return new Set<string>();
+		return new Set([...slot.busy, ...slot.not_responded].map((p) => p.id));
+	});
 </script>
 
 <div class="space-y-4">
@@ -157,16 +165,15 @@
 		</div>
 	{/if}
 
-	<HeatmapGrid
-		{heatmap}
-		{editing}
-		{busyCells}
-		onToggle={toggleCell}
-		onHover={(row: number, day: number) => (hovered = { row, day })}
-		onLeave={() => (hovered = null)}
-	/>
-
-	{#if hoveredSlotValue}
-		<ParticipantList slot={hoveredSlotValue} />
-	{/if}
+	<div class="flex gap-6">
+		<HeatmapGrid
+			{heatmap}
+			{editing}
+			{busyCells}
+			onToggle={toggleCell}
+			onHover={(row: number, day: number) => (hovered = { row, day })}
+			onLeave={() => (hovered = null)}
+		/>
+		<ParticipantList participants={heatmap.participants} {unavailableIds} class="shrink-0" />
+	</div>
 </div>
