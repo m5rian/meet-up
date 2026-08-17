@@ -20,7 +20,7 @@
 
 <div class="grow overflow-x-auto">
 	<div
-		class="grid w-full"
+		class="grid w-full gap-px"
 		style="grid-template-columns: auto repeat({heatmap.days.length}, minmax(0, 1fr));"
 	>
 		<!-- Corner cell -->
