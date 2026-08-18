@@ -1,16 +1,14 @@
 <script lang="ts">
-	import type { HeatmapSlot } from '$lib/types';
-
 	interface Props {
-		slot: HeatmapSlot;
 		editing: boolean;
 		busy: boolean;
+		colorClass: string;
 		onToggle: () => void;
 		onHover: () => void;
 		onLeave: () => void;
 	}
 
-	let { slot, editing, busy, onToggle, onHover, onLeave }: Props = $props();
+	let { editing, busy, colorClass, onToggle, onHover, onLeave }: Props = $props();
 </script>
 
 {#if editing}
@@ -27,9 +25,8 @@
 	<div
 		role="gridcell"
 		tabindex="0"
-		class="h-8 w-full bg-green-800"
+		class="h-8 w-full {colorClass}"
 		onmouseenter={onHover}
 		onmouseleave={onLeave}
-		style="opacity: {slot.free_ratio}"
 	></div>
 {/if}
