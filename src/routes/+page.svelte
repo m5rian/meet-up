@@ -10,6 +10,7 @@
 	const registerError = $derived(form?.register ? form.error : undefined);
 	const loginError = $derived(form?.login ? form.error : undefined);
 	const username = $derived(form?.username ?? '');
+	const timezone = $derived(Intl.DateTimeFormat().resolvedOptions().timeZone);
 </script>
 
 <div class="mx-auto max-w-md">
@@ -39,6 +40,7 @@
 					hint="At least 12 characters, with a number, a letter, and a symbol."
 					error={registerError}
 				/>
+				<input type="hidden" name="timezone" value={timezone} />
 				<Button type="submit" class="w-full">Register</Button>
 			</form>
 		</section>
@@ -62,6 +64,7 @@
 					autocomplete="current-password"
 					error={loginError}
 				/>
+				<input type="hidden" name="timezone" value={timezone} />
 				<Button type="submit" class="w-full">Log in</Button>
 			</form>
 		</section>

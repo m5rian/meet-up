@@ -1,15 +1,17 @@
 /**
  * Calendar sync: fetch a live ICS URL or parse an uploaded .ics file, then
- * rebuild the user's `calendar_blocks` and record the outcome in `sync_jobs`
- * (ARCHITECTURE.md §2, §3.4; CORE.md §4, §5).
+ * rebuild the busy blocks for a single calendar and record the outcome in
+ * `sync_jobs` (ARCHITECTURE.md §2, §3.4; CORE.md §4, §5).
  *
- * `calendar_blocks` are rebuilt on every successful poll/parse — they always
- * reflect the most recent version of the calendar, never merged incrementally.
+ * Each user can connect any number of calendars (live URLs or one-off files).
+ * A calendar's `calendar_blocks` are rebuilt on every successful poll/parse —
+ * they always reflect the most recent version of that calendar, never merged
+ * incrementally. The heatmap then merges all of a user's calendars together.
  * Only computed busy intervals are persisted; raw event details are discarded.
  */
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db';
-import { calendarBlocks, syncJobs, users } from '../db/schema';
+import { calendarBlocks, calendars, syncJobs } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../crypto';
 import { parseIcsToBlocks, defaultExpansionRange, type CalendarBlock } from './ics';
 import type { Result } from '$lib/result';
@@ -90,19 +92,19 @@ export function parseIcsFile(buffer: Buffer): Result<CalendarBlock[], SyncError>
 }
 
 /**
- * Persist a set of busy blocks for a user, replacing any previous calendar blocks.
+ * Persist a set of busy blocks for a calendar, replacing any previous blocks.
  * Returns a typed error when the blocks cannot be written.
  */
 export function replaceCalendarBlocks(
-	userId: string,
+	calendarId: string,
 	blocks: CalendarBlock[]
 ): Result<void, SyncError> {
 	try {
-		db.delete(calendarBlocks).where(eq(calendarBlocks.user_id, userId)).run();
+		db.delete(calendarBlocks).where(eq(calendarBlocks.calendar_id, calendarId)).run();
 		for (const b of blocks) {
 			db.insert(calendarBlocks)
 				.values({
-					user_id: userId,
+					calendar_id: calendarId,
 					start_ts: b.start_ts,
 					end_ts: b.end_ts,
 					is_floating: b.floating
@@ -116,62 +118,79 @@ export function replaceCalendarBlocks(
 }
 
 /** Record a successful sync attempt in `sync_jobs`. */
-export function recordSyncSuccess(userId: string): void {
+export function recordSyncSuccess(calendarId: string): void {
 	const now = new Date();
 	db.insert(syncJobs)
-		.values({ user_id: userId, last_attempt_at: now, last_success_at: now, last_error: null })
+		.values({
+			calendar_id: calendarId,
+			last_attempt_at: now,
+			last_success_at: now,
+			last_error: null
+		})
 		.onConflictDoUpdate({
-			target: syncJobs.user_id,
+			target: syncJobs.calendar_id,
 			set: { last_attempt_at: now, last_success_at: now, last_error: null }
 		})
 		.run();
 }
 
 /** Record a failed sync attempt in `sync_jobs`. */
-export function recordSyncFailure(userId: string, error: string): void {
+export function recordSyncFailure(calendarId: string, error: string): void {
 	const now = new Date();
 	db.insert(syncJobs)
-		.values({ user_id: userId, last_attempt_at: now, last_error: error })
+		.values({ calendar_id: calendarId, last_attempt_at: now, last_error: error })
 		.onConflictDoUpdate({
-			target: syncJobs.user_id,
+			target: syncJobs.calendar_id,
 			set: { last_attempt_at: now, last_error: error }
 		})
 		.run();
 }
 
 /**
- * Run a full sync for a user from their live ICS URL: fetch, parse, persist, and
- * record the outcome. Returns the sync result (typed error on any expected failure).
+ * Run a sync for a single calendar: fetch its URL (or parse nothing for a file),
+ * persist the blocks, and record the outcome. Returns a typed error on any
+ * expected failure.
  */
-export async function syncUserFromUrl(userId: string): Promise<Result<void, SyncError>> {
+export async function syncCalendar(calendarId: string): Promise<Result<void, SyncError>> {
 	const row = db
-		.select({ ics_url_enc: users.ics_url_enc })
-		.from(users)
-		.where(eq(users.id, userId))
+		.select({ source: calendars.source, url_enc: calendars.url_enc })
+		.from(calendars)
+		.where(eq(calendars.id, calendarId))
 		.get();
-	if (!row?.ics_url_enc) {
-		recordSyncFailure(userId, 'No ICS URL configured.');
+	if (!row) {
+		recordSyncFailure(calendarId, 'Calendar no longer exists.');
 		return err('no_source');
 	}
-	const url = decryptSecret(row.ics_url_enc);
+
+	// A file calendar has no live URL to poll — nothing to sync.
+	if (row.source === 'file') {
+		recordSyncFailure(calendarId, 'File calendars are not polled.');
+		return err('no_source');
+	}
+
+	if (!row.url_enc) {
+		recordSyncFailure(calendarId, 'No ICS URL configured.');
+		return err('no_source');
+	}
+	const url = decryptSecret(row.url_enc);
 	if (!url) {
-		recordSyncFailure(userId, 'Could not decrypt the ICS URL.');
+		recordSyncFailure(calendarId, 'Could not decrypt the ICS URL.');
 		return err('encryption_unavailable');
 	}
 
 	const fetched = await fetchIcsBlocks(url);
 	if (!fetched.ok) {
-		recordSyncFailure(userId, syncErrorMessage(fetched.error));
+		recordSyncFailure(calendarId, syncErrorMessage(fetched.error));
 		return err(fetched.error);
 	}
 
-	const written = replaceCalendarBlocks(userId, fetched.data);
+	const written = replaceCalendarBlocks(calendarId, fetched.data);
 	if (!written.ok) {
-		recordSyncFailure(userId, 'Could not save calendar blocks.');
+		recordSyncFailure(calendarId, 'Could not save calendar blocks.');
 		return err(written.error);
 	}
 
-	recordSyncSuccess(userId);
+	recordSyncSuccess(calendarId);
 	return ok(undefined);
 }
 
@@ -195,51 +214,90 @@ export function syncErrorMessage(error: SyncError): string {
 	}
 }
 
-/** Store a user's ICS URL (encrypted at rest) and mark the source as 'url'. */
-export function setUserIcsUrl(userId: string, url: string): Result<void, SyncError> {
-	const encrypted = encryptSecret(url);
-	if (!encrypted) return err('encryption_unavailable');
-	db.update(users)
-		.set({ ics_url_enc: encrypted, ics_source: 'url' })
-		.where(eq(users.id, userId))
-		.run();
-	return ok(undefined);
+/**
+ * Create a new calendar for a user. For a URL calendar the URL is encrypted at
+ * rest; for a file calendar the parsed blocks are written directly. A URL
+ * calendar is immediately fetched (so the user gets instant feedback) unless the
+ * optional `blocks` are provided. Returns the new calendar id.
+ */
+export function createCalendar(
+	userId: string,
+	name: string,
+	source: IcsSource,
+	url: string | null
+): Result<string, SyncError> {
+	let urlEnc: string | null = null;
+	if (source === 'url') {
+		if (!url) return err('no_source');
+		const encrypted = encryptSecret(url);
+		if (!encrypted) return err('encryption_unavailable');
+		urlEnc = encrypted;
+	}
+
+	const inserted = db
+		.insert(calendars)
+		.values({
+			user_id: userId,
+			name: name || (source === 'url' ? 'Live calendar' : 'Uploaded calendar'),
+			source,
+			url_enc: urlEnc
+		})
+		.returning({ id: calendars.id })
+		.get();
+
+	return ok(inserted.id);
 }
 
-/** Clear a user's ICS URL (used when uploading a file instead). */
-export function clearUserIcsUrl(userId: string): void {
-	db.update(users).set({ ics_url_enc: null, ics_source: 'file' }).where(eq(users.id, userId)).run();
-}
-
-/** Load a user's sync status row, if any. */
-export function getSyncStatus(userId: string): {
+/** Load a user's calendars with their sync status. */
+export function getCalendars(userId: string): Array<{
+	id: string;
+	name: string;
+	source: IcsSource;
+	url: string | null;
 	last_success_at: Date | null;
 	last_attempt_at: Date | null;
 	last_error: string | null;
-} | null {
-	const row = db
+}> {
+	const rows = db
 		.select({
+			id: calendars.id,
+			name: calendars.name,
+			source: calendars.source,
+			url_enc: calendars.url_enc,
 			last_success_at: syncJobs.last_success_at,
 			last_attempt_at: syncJobs.last_attempt_at,
 			last_error: syncJobs.last_error
 		})
-		.from(syncJobs)
-		.where(eq(syncJobs.user_id, userId))
-		.get();
-	if (!row) return null;
-	return {
-		last_success_at: row.last_success_at,
-		last_attempt_at: row.last_attempt_at,
-		last_error: row.last_error
-	};
+		.from(calendars)
+		.leftJoin(syncJobs, eq(syncJobs.calendar_id, calendars.id))
+		.where(eq(calendars.user_id, userId))
+		.orderBy(calendars.created_at)
+		.all();
+	return rows.map((r) => ({
+		id: r.id,
+		name: r.name,
+		source: r.source,
+		url: r.url_enc ? decryptSecret(r.url_enc) : null,
+		last_success_at: r.last_success_at,
+		last_attempt_at: r.last_attempt_at,
+		last_error: r.last_error
+	}));
 }
 
-/** The set of user ids that currently have a live ICS URL (for the polling job). */
-export function getUsersWithIcsUrl(): string[] {
+/**
+ * Remove a calendar and everything derived from it (its busy blocks and sync
+ * status), via the ON DELETE CASCADE foreign keys.
+ */
+export function removeCalendar(calendarId: string): void {
+	db.delete(calendars).where(eq(calendars.id, calendarId)).run();
+}
+
+/** The ids of all calendars that have a live URL (for the polling job). */
+export function getUrlCalendars(): string[] {
 	const rows = db
-		.select({ id: users.id })
-		.from(users)
-		.where(and(eq(users.ics_source, 'url')))
+		.select({ id: calendars.id })
+		.from(calendars)
+		.where(and(eq(calendars.source, 'url')))
 		.all();
 	return rows.map((r) => r.id);
 }

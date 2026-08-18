@@ -23,6 +23,17 @@ export interface SyncStatus {
 	last_error: string | null;
 }
 
+/** A calendar the user has connected (a live ICS URL or an uploaded .ics file). */
+export interface CalendarConnection {
+	id: string;
+	name: string;
+	source: 'url' | 'file';
+	/** The decrypted live URL, when this is a URL calendar. */
+	url: string | null;
+	/** This calendar's sync status (per-calendar, from `sync_jobs`). */
+	syncStatus: SyncStatus;
+}
+
 /** A user as shown in the invite picker (username + picture). */
 export interface UserSummary {
 	id: string;

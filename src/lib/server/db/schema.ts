@@ -17,8 +17,6 @@ export const users = sqliteTable(
 		username: text('username').notNull().unique(),
 		password_hash: text('password_hash').notNull(),
 		profile_picture: text('profile_picture'), // base64 (or NULL). Always resized to 32×32 on upload.
-		ics_url_enc: text('ics_url_enc'), // AES-GCM encrypted ICS URL (nonce prepended). Treated as a bearer secret.
-		ics_source: text('ics_source', { enum: ['url', 'file'] }), // 'url' = live ICS URL (polled); 'file' = one-off upload (no polling). NULL = none.
 		tz_id: text('tz_id'), // IANA time zone id, auto-detected from the browser.
 		sleep_start: text('sleep_start'), // local wall-clock 'HH:mm:ss'
 		sleep_end: text('sleep_end'), // local wall-clock 'HH:mm:ss'
@@ -72,14 +70,29 @@ export const participants = sqliteTable(
 	(table) => [uniqueIndex('participants_event_user_unique').on(table.event_id, table.user_id)]
 );
 
-/** Busy intervals computed solely from calendar free/busy (never raw event details). Per-user. */
-export const calendarBlocks = sqliteTable('calendar_blocks', {
+export const calendars = sqliteTable('calendars', {
 	id: text('id')
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	user_id: text('user_id')
 		.notNull()
 		.references(() => users.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(), // display name shown in the profile calendar list.
+	source: text('source', { enum: ['url', 'file'] }).notNull(), // 'url' = live ICS URL (polled); 'file' = one-off upload (no polling).
+	url_enc: text('url_enc'), // AES-GCM encrypted ICS URL (nonce prepended). Treated as a bearer secret. Null for file calendars.
+	created_at: integer('created_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.$defaultFn(() => new Date())
+});
+
+/** Busy intervals computed solely from calendar free/busy (never raw event details). Per calendar. */
+export const calendarBlocks = sqliteTable('calendar_blocks', {
+	id: text('id')
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	calendar_id: text('calendar_id')
+		.notNull()
+		.references(() => calendars.id, { onDelete: 'cascade' }),
 	start_ts: text('start_ts').notNull(), // UTC ISO string, or wall-clock (floating) ISO string without offset.
 	end_ts: text('end_ts').notNull(),
 	is_floating: integer('is_floating', { mode: 'boolean' }).notNull().default(false)
@@ -116,11 +129,11 @@ export const sessions = sqliteTable('sessions', {
 		.$defaultFn(() => new Date())
 });
 
-/** One row per user: last sync attempt / last success / last error. */
+/** One row per calendar: last sync attempt / last success / last error. */
 export const syncJobs = sqliteTable('sync_jobs', {
-	user_id: text('user_id')
+	calendar_id: text('calendar_id')
 		.primaryKey()
-		.references(() => users.id, { onDelete: 'cascade' }),
+		.references(() => calendars.id, { onDelete: 'cascade' }),
 	last_success_at: integer('last_success_at', { mode: 'timestamp_ms' }),
 	last_attempt_at: integer('last_attempt_at', { mode: 'timestamp_ms' }),
 	last_error: text('last_error')

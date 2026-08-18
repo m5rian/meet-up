@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SyncStatus, UserProfile } from '$lib/types';
+	import type { CalendarConnection, UserProfile } from '$lib/types';
 	import {
 		Avatar,
 		ProfilePictureForm,
@@ -12,15 +12,13 @@
 	}: {
 		data: {
 			profile: UserProfile;
-			icsUrl: string | null;
-			icsSource: 'url' | 'file' | null;
-			syncStatus: SyncStatus | null;
+			calendars: CalendarConnection[];
 			pictureError?: string;
 			pictureSaved?: boolean;
 			sleepError?: string;
 			sleepSaved?: boolean;
-			icsError?: string;
-			icsSaved?: boolean;
+			calendarError?: string;
+			calendarSaved?: boolean;
 		};
 	} = $props();
 </script>
@@ -63,14 +61,9 @@
 
 	<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 		<h2 class="mb-4 text-lg font-semibold text-gray-900">Calendar</h2>
-		{#if data.icsSaved}
+		{#if data.calendarSaved}
 			<div class="mb-3 rounded-md bg-green-50 p-3 text-sm text-green-700">Calendar updated.</div>
 		{/if}
-		<CalendarIntegrationForm
-			icsUrl={data.icsUrl}
-			icsSource={data.icsSource}
-			syncStatus={data.syncStatus}
-			error={data.icsError}
-		/>
+		<CalendarIntegrationForm calendars={data.calendars} error={data.calendarError} />
 	</section>
 </div>

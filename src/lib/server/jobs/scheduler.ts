@@ -1,7 +1,7 @@
 /**
  * In-process background scheduler (ARCHITECTURE.md §1 "Background jobs").
  *
- * A simple setInterval loop polls every user's live ICS URL on the configured
+ * A simple setInterval loop polls every live ICS URL calendar on the configured
  * interval (ICS_POLL_INTERVAL_MINUTES, default 30). Each poll writes to the
  * `sync_jobs` table so the "last synced / last error" UI stays accurate.
  *
@@ -10,7 +10,7 @@
  * twice is a no-op.
  */
 import { env } from '$env/dynamic/private';
-import { getUsersWithIcsUrl, syncUserFromUrl } from '../calendar/sync';
+import { getUrlCalendars, syncCalendar } from '../calendar/sync';
 
 const DEFAULT_POLL_INTERVAL_MINUTES = 30;
 
@@ -32,11 +32,11 @@ export function startScheduler(): void {
 	setInterval(() => void pollAll(), intervalMs);
 }
 
-/** Poll every user that has a live ICS URL. Failures are recorded per-user. */
+/** Poll every calendar that has a live URL. Failures are recorded per-calendar. */
 async function pollAll(): Promise<void> {
-	const userIds = getUsersWithIcsUrl();
-	for (const userId of userIds) {
-		// Each user's sync outcome is recorded in sync_jobs; never throw.
-		await syncUserFromUrl(userId);
+	const calendarIds = getUrlCalendars();
+	for (const calendarId of calendarIds) {
+		// Each calendar's sync outcome is recorded in sync_jobs; never throw.
+		await syncCalendar(calendarId);
 	}
 }

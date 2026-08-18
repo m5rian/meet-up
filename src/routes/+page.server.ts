@@ -31,6 +31,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const username = getFormString(form, 'username').trim();
 		const password = getFormString(form, 'password');
+		const timezone = getFormString(form, 'timezone');
 
 		const usernameResult = validateUsername(username);
 		if (!usernameResult.ok) {
@@ -61,7 +62,7 @@ export const actions: Actions = {
 		const passwordHash = await hashPassword(password);
 		const user = db
 			.insert(users)
-			.values({ username, password_hash: passwordHash })
+			.values({ username, password_hash: passwordHash, tz_id: timezone })
 			.returning({ id: users.id })
 			.get();
 
@@ -73,6 +74,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const username = getFormString(form, 'username').trim();
 		const password = getFormString(form, 'password');
+		const timezone = getFormString(form, 'timezone');
 
 		const user = db
 			.select({ id: users.id, password_hash: users.password_hash })
@@ -88,6 +90,9 @@ export const actions: Actions = {
 		if (!valid) {
 			return fail(400, { login: true, username, error: 'Invalid username or password.' });
 		}
+
+		// Keep the stored time zone fresh (it may have changed since signup).
+		db.update(users).set({ tz_id: timezone }).where(eq(users.id, user.id)).run();
 
 		createSession(cookies, user.id);
 		throw redirect(303, '/events');

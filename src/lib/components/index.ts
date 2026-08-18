@@ -14,3 +14,6 @@ export { default as InvitePicker } from './InvitePicker.svelte';
 export { default as ProfilePictureForm } from './ProfilePictureForm.svelte';
 export { default as CalendarIntegrationForm } from './CalendarIntegrationForm.svelte';
 export { default as SyncStatusIndicator } from './SyncStatusIndicator.svelte';
+export { default as CalendarRow } from './CalendarRow.svelte';
+export { default as CalendarSyncBadge } from './CalendarSyncBadge.svelte';
+export { default as AddCalendarModal } from './AddCalendarModal.svelte';

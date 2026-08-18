@@ -8,7 +8,7 @@
 import { DateTime } from 'luxon';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from './db';
-import { calendarBlocks, events, manualBlocks, participants, users } from './db/schema';
+import { calendarBlocks, calendars, events, manualBlocks, participants, users } from './db/schema';
 import type {
 	HeatmapData,
 	HeatmapDay,
@@ -141,13 +141,14 @@ function loadParticipants(
 	const calendarRows = userIds.length
 		? db
 				.select({
-					user_id: calendarBlocks.user_id,
+					user_id: calendars.user_id,
 					start_ts: calendarBlocks.start_ts,
 					end_ts: calendarBlocks.end_ts,
 					is_floating: calendarBlocks.is_floating
 				})
 				.from(calendarBlocks)
-				.where(inArray(calendarBlocks.user_id, userIds))
+				.innerJoin(calendars, eq(calendarBlocks.calendar_id, calendars.id))
+				.where(inArray(calendars.user_id, userIds))
 				.all()
 		: [];
 	// Floating blocks are stored as wall-clock times; convert them to UTC in the
