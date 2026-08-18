@@ -33,11 +33,13 @@ This is a deliberately narrow scope: no OAuth client IDs/secrets to register, no
 ## 2. Data Model (SQLite via Drizzle)
 
 ```
-users(id, username UNIQUE, password_hash, profile_picture, ics_url_enc, tz_id, sleep_start, sleep_end, created_at)
+users(id, username UNIQUE, password_hash, profile_picture, tz_id, sleep_start, sleep_end, created_at, calendar_token)
        -- tz_id = user's auto-detected IANA time zone ID (e.g. 'America/New_York'), captured from the browser
        -- sleep_start / sleep_end = LOCAL wall-clock times-of-day 'HH:mm:ss' (e.g. '23:00:00' / '07:00:00'),
        --   the user's recurring daily sleep window, interpreted in the user's tz_id; NULL = no sleep block set.
        --   Overnight windows (sleep_end < sleep_start) span midnight, per the same rule as event time windows (§3.2).
+       -- calendar_token = random secret used to authenticate the user's private ICS feed (see §5). NULL until generated.
+       --   Regenerable; rotating it invalidates the old feed URL.
 
 events(id, slug, organizer_id, title, visibility text[private|link], tz_id,
        date_range_start, date_range_end, time_window_start, time_window_end,
@@ -184,3 +186,43 @@ Repository layout (single SvelteKit app, but structured so calendar-sync logic i
 ```
 
 A true multi-package monorepo (pnpm workspaces with separate `packages/db`, `packages/calendar-sync`, `apps/web`) is reasonable if you want to later ship the calendar-sync logic as a standalone worker for scale — mention this as a Phase 7+ option, but don't build it up front. Start as one SvelteKit package; split later only if you actually hit SQLite's concurrency limits (unlikely at this tool's scale — SQLite in WAL mode handles the read-heavy heatmap-polling pattern fine).
+
+---
+
+## 5. Finalized meetings → per-user calendar feed
+
+**Goal:** once a meeting is finalized, each participant gets it pushed automatically into their own calendar. To stay OAuth-free and in keeping with `CORE.md` §2, we don't push to Google/Outlook/Apple directly. Instead every user gets a **private, dynamically-generated ICS feed** of their finalized meetings; they subscribe to it in their calendar app exactly like the "secret address" every provider exposes. Their provider polls the feed periodically, so new finalized meetings show up automatically.
+
+### 5.1 Finalize (prerequisite)
+
+Finalizing records the chosen slot on the event so the feed (and a one-off invite) can serve it:
+
+- Only the **organizer** can finalize. Store the chosen slot as `events.finalized_start_ts` / `events.finalized_end_ts` (UTC ISO strings). Validate the slot is inside the event's `date_range_*` and `time_window_*` and is aligned to `slot_granularity_minutes`.
+- Clearing/re-picking a slot updates the two columns in place; no history table needed for now.
+- **No `LOCATION` is stored or rendered** (decision for now — title + start/end + organizer reference only). If locations are wanted later, add an `events.location` column and include `LOCATION` in the feed/invite.
+
+### 5.2 Auth token (`users.calendar_token`)
+
+- A random 32-byte value, stored base64url, treated as a **bearer secret** (anyone with it can read the user's finalized meetings).
+- `NULL` until generated; **regenerable** from the profile page — rotating it immediately invalidates the old feed URL.
+- Constant-time lookup on the feed route; no session/cookie required (calendar providers fetch without one).
+
+### 5.3 Feed route
+
+`GET /calendar/<token>.ics` → `Content-Type: text/calendar; charset=utf-8`.
+
+- Resolve the token to a user; unknown token → `404`.
+- Query the events where the user is a participant (`participants.user_id`) **and** `finalized_start_ts` / `finalized_end_ts` are both set.
+- Generate one `VEVENT` per finalized meeting via a shared `buildVevent(event)` helper: `DTSTART`/`DTEND` as UTC (`YYYYMMDDTHHMMSSZ`), `SUMMARY` = `events.title`, `UID` = `events.id`, `STATUS:CONFIRMED`, organizer reference from `events.organizer_id`.
+- Single instances only — no `RRULE` expansion needed for finalized one-off meetings. If a future feature finalizes recurring meetings, revisit this.
+- The feed contains only **finalized** meetings (decision); tentative/pending are excluded.
+
+### 5.4 Reuse: per-event download
+
+`buildVevent` is also used by the one-off "Add to calendar" `.ics` download (Phase 3), so both paths share identical output and stay in sync.
+
+### 5.5 Profile UX
+
+- Show the feed URL with a **copy** button.
+- A **regenerate** action that rotates `calendar_token` (old URL stops working).
+- Note in the UI that the URL is secret and that new finalized meetings appear automatically once the provider re-polls.

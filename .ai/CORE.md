@@ -28,6 +28,8 @@ Single tier, deliberately:
 - Handle recurring events (`RRULE`) by expanding occurrences within a fixed lookahead horizon (`NOW()` → `NOW() + 90 days`) intersected with the union of the active event date ranges the user participates in — `ical.js`/`node-ical` both support this, don't hand-roll RRULE math.
 - No OAuth client registration, no CalDAV auth, no per-provider API integration — this is the whole calendar layer.
 
+**Outbound (push to users' calendars):** finalized meetings are served back to each participant via a private per-user ICS feed they subscribe to in their own calendar app (see §4.1 and `ARCHITECTURE.md` §5). No push API is used — their provider polls the feed, which keeps this OAuth-free like everything else.
+
 **Timezone handling:** each user's time zone is auto-detected from their browser and stored in `users.tz_id`; the organizer's is copied to `events.tz_id` at creation (the event's canonical time zone). Absolute meeting timestamps are stored as **UTC** (ISO 8601, `YYYY-MM-DDTHH:mm:ssZ`), while recurring daily time windows are stored as **local wall-clock times-of-day** (`HH:mm:ss`) and expanded to UTC dynamically per date. Never store fixed numeric offsets like `+04:00` as the primary time zone reference — offsets shift with Daylight Saving Time (DST). The client renders time-axis labels, day columns, and available slots in each viewer's local time zone; daily availability windows defined by the organizer are converted dynamically to the viewer's local equivalent. The full conversion algorithm, DST edge cases, grid day-boundary rules, and ICS parsing rules are specified in `ARCHITECTURE.md` §3.
 
 ---
@@ -72,8 +74,21 @@ POST  submit-ics-url              submit/update a live ICS URL (per-user, trigge
 POST  upload-ics-file             upload a one-off .ics file (parsed once, no polling)
 POST  update-sleep-schedule       set/clear the user's recurring daily sleep window (sleep_start / sleep_end, local times)
 POST  update-availability         manual overrides (per event)
-POST  finalize                    organizer picks a slot → generates a downloadable `.ics` invite
+POST  finalize                    organizer picks a slot → sets finalized_start_ts/end_ts (see §4.1) and generates a downloadable `.ics` invite
+POST  regenerate-calendar-token   rotate the user's secret feed token (invalidates the old feed URL)
+
+Public (no session)
+GET   /calendar/<token>.ics       per-user private ICS feed of finalized meetings (token-authenticated, see §6)
 ```
+
+### 4.1 Finalized meetings → per-user calendar feed
+
+Once a meeting is finalized, participants should get it in their own calendars automatically. To stay OAuth-free, each user subscribes to a **private ICS feed** of their finalized meetings (ARCHITECTURE.md §5):
+
+- **Finalize** (`POST finalize`): the organizer picks a slot; the app stores `events.finalized_start_ts` / `finalized_end_ts` (UTC) and returns a downloadable `.ics` invite.
+- **Feed** (`GET /calendar/<token>.ics`): serves one `VEVENT` per finalized meeting the user participates in. `token` is a per-user secret (`users.calendar_token`), regenerable from the profile page.
+- **Profile UX**: copy the feed URL + a "regenerate" button (rotates the token). New finalized meetings appear automatically once the user's calendar provider re-polls the feed.
+- **Privacy**: the feed only ever contains titles and time ranges of **finalized** meetings — consistent with the tool's "free/busy only, no raw details" stance, but the title is intentionally included so the meeting is recognizable.
 
 ---
 

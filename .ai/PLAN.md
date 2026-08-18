@@ -35,10 +35,20 @@ Tick a box when a task is done. Phases are meant to be completed in order. Full 
 
 ## Phase 3 — Finalize & invite
 
-- [ ] Organizer selects winning slot and sets the final meeting time (stored on the event).
-- [ ] Generate a downloadable `.ics` invite for the chosen slot.
+- [ ] Organizer selects winning slot and sets the final meeting time (`finalized_start_ts` / `finalized_end_ts` on the event; guard so only the organizer can finalize, and validate the slot is within the event's range).
+- [ ] Build a shared `buildVevent(event)` helper: start/end as UTC, `SUMMARY` = event title, `UID` = event id, organizer reference, `STATUS:CONFIRMED`. Single instance only — no `RRULE`. No `LOCATION` for now (decision: omit it).
+- [ ] Generate a downloadable `.ics` invite for the chosen slot (reuses `buildVevent`).
 
-## Phase 4 — Polish
+## Phase 4 — Per-user calendar feed
+
+A user subscribes to a private, dynamically-generated ICS feed of all their **finalized** meetings, so those meetings appear automatically in their calendar app. This mirrors the "secret address" every provider exposes and keeps the app OAuth-free. Depends on Phase 3 (finalized meetings). Design notes live in `ARCHITECTURE.md` §5.
+
+- [ ] Add `users.calendar_token` (random 32-byte base64url, secret, regenerable; `NULL` until generated).
+- [ ] `GET /calendar/<token>.ics` → `text/calendar`; token-authenticated (constant-time lookup, no session). Serves only meetings where the user is a participant AND `finalized_start_ts` / `finalized_end_ts` are set.
+- [ ] Profile page: show the feed URL with a copy button, plus a "regenerate" action that rotates the token (old feed URL stops working).
+- [ ] Per-event "Add to calendar" download reusing `buildVevent` (same helper as Phase 3).
+
+## Phase 5 — Polish
 
 - [ ] Timezone display polish, "best slots" ranked list, dark mode, mobile-responsive grid.
 - [ ] Rate limiting, ICS-URL validation/SSRF hardening, error handling.
