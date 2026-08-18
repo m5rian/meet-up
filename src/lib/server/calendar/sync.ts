@@ -29,7 +29,11 @@ export type SyncError =
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_ICS_BYTES = 5 * 1024 * 1024; // 5 MB upload cap
 
-/** Validate a submitted ICS URL. Only https:// is accepted (CORE.md §5). */
+/**
+ * Validate a submitted ICS URL. Only https:// and webcal:// are accepted
+ * (CORE.md §5). webcal:// is the scheme iCloud and CalDAV providers publish;
+ * it is normalized to https:// so it can be fetched like any other URL.
+ */
 export function validateIcsUrl(raw: string): Result<string, SyncError> {
 	const url = raw.trim();
 	if (!url) return err('no_source');
@@ -39,7 +43,11 @@ export function validateIcsUrl(raw: string): Result<string, SyncError> {
 	} catch {
 		return err('invalid_url');
 	}
-	if (parsed.protocol !== 'https:') return err('not_https');
+	if (parsed.protocol !== 'https:' && parsed.protocol !== 'webcal:') return err('not_https');
+	// webcal:// is a non-special scheme, so URL treats it as a relative path and
+	// refuses to rewrite `.protocol`. Normalize by string substitution to https://
+	// (iCloud/CalDAV publish the same resource over https).
+	if (url.startsWith('webcal://')) return ok(`https://${url.slice('webcal://'.length)}`);
 	return ok(url);
 }
 

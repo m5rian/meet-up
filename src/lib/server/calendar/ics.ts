@@ -72,7 +72,10 @@ export function parseIcsToBlocks(
 
 		for (const instance of instances) {
 			const block = instanceToBlock(instance);
-			if (block) blocks.push(block);
+			// Skip zero-length intervals (e.g. iCloud all-day reminders where
+			// DTSTART == DTEND): they never overlap a grid cell, so they'd be
+			// silently dropped from busy time anyway.
+			if (block && block.start_ts < block.end_ts) blocks.push(block);
 		}
 	}
 
