@@ -35,9 +35,9 @@ Tick a box when a task is done. Phases are meant to be completed in order. Full 
 
 ## Phase 3 — Finalize & invite
 
-- [ ] Organizer selects winning slot and sets the final meeting time (`finalized_start_ts` / `finalized_end_ts` on the event; guard so only the organizer can finalize, and validate the slot is within the event's range).
-- [ ] Build a shared `buildVevent(event)` helper: start/end as UTC, `SUMMARY` = event title, `UID` = event id, organizer reference, `STATUS:CONFIRMED`. Single instance only — no `RRULE`. No `LOCATION` for now (decision: omit it).
-- [ ] Generate a downloadable `.ics` invite for the chosen slot (reuses `buildVevent`).
+- [x] Organizer selects winning slot and sets the final meeting time (`finalized_start_ts` / `finalized_end_ts` on the event; guard so only the organizer can finalize, and validate the slot is within the event's range).
+- [x] Build a shared `buildVevent(event)` helper: start/end as UTC, `SUMMARY` = event title, `UID` = event id, organizer reference, `STATUS:CONFIRMED`. Single instance only — no `RRULE`. No `LOCATION` for now (decision: omit it).
+- [x] Generate a downloadable `.ics` invite for the chosen slot (reuses `buildVevent`).
 
 ## Phase 4 — Per-user calendar feed
 

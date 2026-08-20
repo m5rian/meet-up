@@ -9,9 +9,14 @@
 
 	interface Props {
 		heatmap: HeatmapData;
+		/** When true and the viewer is the organizer, cells can be clicked to select the final slot. */
+		finalizeMode?: boolean;
+		/** The selected final slot start (UTC ISO), highlighted when in finalize mode. */
+		selectedStart?: string | null;
+		onSelectSlot?: (start: string, end: string) => void;
 	}
 
-	let { heatmap }: Props = $props();
+	let { heatmap, finalizeMode = false, selectedStart = null, onSelectSlot }: Props = $props();
 
 	let editing = $state(false);
 	// Cells the user has marked busy in editing mode, keyed by `${rowIdx}:${dayIdx}`.
@@ -116,6 +121,13 @@
 		if (!slot) return new Set<string>();
 		return new Set([...slot.busy, ...slot.not_responded].map((p) => p.id));
 	});
+
+	// When in finalize mode, clicking a cell reports its UTC interval upward.
+	function handleSelect(row: number, day: number): void {
+		if (!finalizeMode || !onSelectSlot) return;
+		const [start, end] = cellInterval(row, day);
+		onSelectSlot(start, end);
+	}
 </script>
 
 <div class="space-y-4">
@@ -169,8 +181,11 @@
 		<HeatmapGrid
 			{heatmap}
 			{editing}
+			selectable={finalizeMode && !editing}
+			{selectedStart}
 			{busyCells}
 			onToggle={toggleCell}
+			onSelect={handleSelect}
 			onHover={(row: number, day: number) => (hovered = { row, day })}
 			onLeave={() => (hovered = null)}
 		/>

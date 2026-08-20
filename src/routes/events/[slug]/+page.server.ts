@@ -1,9 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { and, eq } from 'drizzle-orm';
+import { DateTime } from 'luxon';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { manualBlocks, participants, users } from '$lib/server/db/schema';
+import { events, manualBlocks, participants, users } from '$lib/server/db/schema';
 import {
 	buildHeatmap,
 	getEventBySlug,
@@ -176,6 +177,62 @@ export const actions: Actions = {
 		}
 
 		return { saved: true };
+	},
+
+	finalize: async ({ params, locals, request }) => {
+		if (!locals.user) throw redirect(302, '/');
+		const event = getEventBySlug(params.slug);
+		if (!event) return fail(404, { finalizeError: 'Event not found.' });
+		if (event.organizer_id !== locals.user.id)
+			return fail(403, { finalizeError: 'Only the organizer can finalize the meeting.' });
+
+		const form = await request.formData();
+		const startRaw = getFormString(form, 'start_ts');
+		const endRaw = getFormString(form, 'end_ts');
+		if (!startRaw || !endRaw) return fail(400, { finalizeError: 'Choose a time slot.' });
+
+		// The selected heatmap cell gives explicit UTC start/end; parse them.
+		const start = DateTime.fromISO(startRaw, { zone: 'utc' });
+		const end = DateTime.fromISO(endRaw, { zone: 'utc' });
+		if (!start.isValid || !end.isValid) return fail(400, { finalizeError: 'Invalid time slot.' });
+
+		// A finalized meeting covers one grid cell: the duration must match the slot
+		// granularity, and the start must sit on a granularity boundary.
+		if (end.diff(start, 'minutes').minutes !== event.slot_granularity_minutes) {
+			return fail(400, {
+				finalizeError: 'The meeting must be exactly one slot long.'
+			});
+		}
+		if (start.minute % event.slot_granularity_minutes !== 0 || start.second !== 0) {
+			return fail(400, {
+				finalizeError: `The start time must be aligned to ${String(
+					event.slot_granularity_minutes
+				)} minutes.`
+			});
+		}
+
+		const localStart = start.setZone(event.tz_id);
+		const localEnd = end.setZone(event.tz_id);
+		const windowOk =
+			event.time_window_start <= localStart.toFormat('HH:mm:ss') &&
+			localEnd.toFormat('HH:mm:ss') <= event.time_window_end;
+		if (!windowOk) {
+			return fail(400, { finalizeError: 'The slot must be inside the availability window.' });
+		}
+		const date = localStart.toISODate();
+		if (!date || date < event.date_range_start || date > event.date_range_end) {
+			return fail(400, { finalizeError: 'The slot must be within the event date range.' });
+		}
+
+		db.update(events)
+			.set({
+				finalized_start_ts: start.toUTC().toISO({ suppressMilliseconds: true }),
+				finalized_end_ts: end.toUTC().toISO({ suppressMilliseconds: true })
+			})
+			.where(eq(events.id, event.id))
+			.run();
+
+		return { finalized: true };
 	}
 };
 

@@ -1,17 +1,33 @@
 <script lang="ts">
+	import { DateTime } from 'luxon';
 	import type { HeatmapData, HeatmapSlot } from '$lib/types';
 	import HeatmapCell from './HeatmapCell.svelte';
 
 	interface Props {
 		heatmap: HeatmapData;
 		editing: boolean;
+		/** When true, cells are clickable to select the final meeting slot. */
+		selectable: boolean;
+		/** The selected final slot as a UTC ISO start timestamp, or null. */
+		selectedStart: string | null;
 		busyCells: Record<string, boolean>;
 		onToggle: (row: number, day: number) => void;
+		onSelect: (row: number, day: number) => void;
 		onHover: (row: number, day: number) => void;
 		onLeave: () => void;
 	}
 
-	let { heatmap, editing, busyCells, onToggle, onHover, onLeave }: Props = $props();
+	let {
+		heatmap,
+		editing,
+		selectable,
+		selectedStart,
+		busyCells,
+		onToggle,
+		onSelect,
+		onHover,
+		onLeave
+	}: Props = $props();
 
 	// Discrete green scale, lightest first. The slot with the fewest free
 	// participants (least overlap) starts at the lightest color, and each higher
@@ -53,6 +69,15 @@
 	function cellKey(row: number, day: number): string {
 		return String(row) + ':' + String(day);
 	}
+
+	// The cell's UTC start timestamp, used to highlight the selected final slot.
+	function cellStart(row: number, day: number): string {
+		const dayStart = heatmap.days[day].start_ts;
+		const dt = DateTime.fromISO(dayStart, { zone: 'utc' }).plus({
+			minutes: heatmap.rows[row].offset_minutes
+		});
+		return dt.toISO({ suppressMilliseconds: true }) ?? '';
+	}
 </script>
 
 <div class="grow overflow-x-auto">
@@ -74,10 +99,15 @@
 			{#each heatmap.days as day, d (day.date)}
 				<HeatmapCell
 					{editing}
+					{selectable}
+					selected={selectedStart === cellStart(r, d)}
 					busy={busyCells[cellKey(r, d)]}
 					colorClass={cellColor(heatmap.cells[r][d])}
 					onToggle={() => {
 						onToggle(r, d);
+					}}
+					onSelect={() => {
+						onSelect(r, d);
 					}}
 					onHover={() => {
 						onHover(r, d);
