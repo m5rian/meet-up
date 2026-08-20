@@ -4,7 +4,8 @@
 		Avatar,
 		ProfilePictureForm,
 		SleepScheduleForm,
-		CalendarIntegrationForm
+		CalendarIntegrationForm,
+		CalendarFeedSection
 	} from '$lib/components';
 
 	let {
@@ -13,12 +14,14 @@
 		data: {
 			profile: UserProfile;
 			calendars: CalendarConnection[];
+			feedUrl: string;
 			pictureError?: string;
 			pictureSaved?: boolean;
 			sleepError?: string;
 			sleepSaved?: boolean;
 			calendarError?: string;
 			calendarSaved?: boolean;
+			tokenRegenerated?: boolean;
 		};
 	} = $props();
 </script>
@@ -65,5 +68,10 @@
 			<div class="mb-3 rounded-md bg-green-50 p-3 text-sm text-green-700">Calendar updated.</div>
 		{/if}
 		<CalendarIntegrationForm calendars={data.calendars} error={data.calendarError} />
+	</section>
+
+	<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+		<h2 class="mb-4 text-lg font-semibold text-gray-900">Calendar feed</h2>
+		<CalendarFeedSection feedUrl={data.feedUrl} regenerated={data.tokenRegenerated} />
 	</section>
 </div>

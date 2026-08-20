@@ -1,12 +1,14 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { eq } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { calendars, users } from '$lib/server/db/schema';
 import { resizeProfilePicture } from '$lib/server/picture';
 import { isTimeOfDay } from '$lib/server/time';
 import { getFormString } from '$lib/server/form';
 import type { CalendarConnection, UserProfile } from '$lib/types';
+import { setCalendarToken } from '$lib/server/feed';
 import {
 	createCalendar,
 	fetchIcsBlocks,
@@ -41,7 +43,8 @@ export const load: PageServerLoad = ({ locals }) => {
 			profile_picture: users.profile_picture,
 			tz_id: users.tz_id,
 			sleep_start: users.sleep_start,
-			sleep_end: users.sleep_end
+			sleep_end: users.sleep_end,
+			calendar_token: users.calendar_token
 		})
 		.from(users)
 		.where(eq(users.id, locals.user.id))
@@ -65,7 +68,16 @@ export const load: PageServerLoad = ({ locals }) => {
 		syncStatus: toSyncStatus(c)
 	}));
 
-	return { profile, calendars };
+	// The user's private calendar feed URL (generated lazily on first view so
+	// users who never use it don't get an unused secret token).
+	let calendarToken = row.calendar_token;
+	if (!calendarToken) {
+		calendarToken = setCalendarToken(row.id);
+	}
+	const baseUrl = env.BASE_URL.replace(/\/$/, '');
+	const calendarFeedUrl = `${baseUrl}/calendar/${calendarToken}.ics`;
+
+	return { profile, calendars, feedUrl: calendarFeedUrl };
 };
 
 export const actions: Actions = {
@@ -220,6 +232,12 @@ export const actions: Actions = {
 
 		removeCalendar(calendarId);
 		return { calendarSaved: true };
+	},
+
+	'regenerate-calendar-token': ({ locals }) => {
+		if (!locals.user) throw redirect(302, '/');
+		setCalendarToken(locals.user.id);
+		return { tokenRegenerated: true };
 	}
 };
 

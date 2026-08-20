@@ -18,6 +18,7 @@ export const users = sqliteTable(
 		password_hash: text('password_hash').notNull(),
 		profile_picture: text('profile_picture'), // base64 (or NULL). Always resized to 32×32 on upload.
 		tz_id: text('tz_id'), // IANA time zone id, auto-detected from the browser.
+		calendar_token: text('calendar_token'), // secret per-user token for the private ICS feed (ARCHITECTURE.md §5.2). NULL until generated.
 		sleep_start: text('sleep_start'), // local wall-clock 'HH:mm:ss'
 		sleep_end: text('sleep_end'), // local wall-clock 'HH:mm:ss'
 		created_at: integer('created_at', { mode: 'timestamp_ms' })

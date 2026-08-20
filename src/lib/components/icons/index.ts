@@ -8,3 +8,4 @@ export { default as InfoIcon } from './InfoIcon.svelte';
 export { default as LogoutIcon } from './LogoutIcon.svelte';
 export { default as RefreshIcon } from './RefreshIcon.svelte';
 export { default as PlusIcon } from './PlusIcon.svelte';
+export { default as CopyIcon } from './CopyIcon.svelte';

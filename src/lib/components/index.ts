@@ -17,3 +17,4 @@ export { default as SyncStatusIndicator } from './SyncStatusIndicator.svelte';
 export { default as CalendarRow } from './CalendarRow.svelte';
 export { default as CalendarSyncBadge } from './CalendarSyncBadge.svelte';
 export { default as AddCalendarModal } from './AddCalendarModal.svelte';
+export { default as CalendarFeedSection } from './CalendarFeedSection.svelte';
