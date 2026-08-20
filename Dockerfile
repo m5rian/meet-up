@@ -10,6 +10,10 @@ ENV HUSKY=0
 
 WORKDIR /app
 
+# better-sqlite3 is compiled with node-gyp, which needs Python and a C++
+# toolchain inside the image.
+RUN apk add --no-cache python3 make g++
+
 # Install all deps (dev deps included) for building.
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -28,11 +32,13 @@ ENV HUSKY=0 \
 
 WORKDIR /app
 
-# Install only production deps. tsx is a runtime dependency (used by the
-# migration runner), so it is available here; native modules (better-sqlite3,
-# sharp) are compiled for this platform by npm ci.
+# better-sqlite3 and sharp are native modules compiled with node-gyp, which
+# needs Python and a C/C++ toolchain. Install them, run npm ci, then remove the
+# build tooling so the final image stays lean.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache python3 make g++ \
+    && npm ci --omit=dev \
+    && apk del python3 make g++
 
 # Copy the built output produced in the build stage.
 COPY --from=build /app/build ./build
