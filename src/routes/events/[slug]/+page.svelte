@@ -8,6 +8,7 @@
 		slug: string;
 		title: string;
 		visibility: 'private' | 'link';
+		tz_id: string;
 		date_range_start: string;
 		date_range_end: string;
 		time_window_start: string;
@@ -85,7 +86,7 @@
 </script>
 
 <div class="space-y-6">
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div>
 			<h1 class="text-xl font-bold text-gray-900">{data.event.title}</h1>
 			<p class="mt-1 text-sm text-gray-500">
@@ -93,6 +94,9 @@
 				{data.event.time_window_start.slice(0, 5)}–{data.event.time_window_end.slice(0, 5)} ·
 				{data.event.visibility === 'private' ? 'Private' : 'Link'} event
 			</p>
+			{#if data.event.tz_id}
+				<p class="mt-0.5 text-xs text-gray-400">Times shown in {data.event.tz_id}</p>
+			{/if}
 		</div>
 		<div class="flex items-center gap-2">
 			<Button type="button" variant="secondary" onclick={copyLink}>

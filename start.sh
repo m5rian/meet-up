@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Build & start script for Find-Time.
+# Build & start script for Meet-Up.
 #
 #   1. Installs dependencies (unless already installed)
 #   2. Generates + applies pending Drizzle migrations
@@ -29,5 +29,5 @@ node --import tsx drizzle/migrate.ts
 
 npm run build
 
-echo "Starting Find-Time server…"
+echo "Starting Meet-Up server…"
 exec node build

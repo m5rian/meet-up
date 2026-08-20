@@ -14,7 +14,7 @@
 </script>
 
 <div class="mx-auto max-w-md">
-	<h1 class="mb-1 text-center text-2xl font-bold text-gray-900">Find-Time</h1>
+	<h1 class="mb-1 text-center text-2xl font-bold text-gray-900">Meet-Up</h1>
 	<p class="mb-6 text-center text-sm text-gray-500">
 		Schedule meetings with a heatmap of everyone's availability.
 	</p>

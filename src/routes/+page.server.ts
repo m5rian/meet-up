@@ -6,7 +6,12 @@ import { users } from '$lib/server/db/schema';
 import { hashPassword, validatePassword, validateUsername, verifyPassword } from '$lib/server/auth';
 import { createSession } from '$lib/server/sessions';
 import { getFormString } from '$lib/server/form';
+import { rateLimit } from '$lib/server/rate-limit';
 import type { PasswordError, UsernameError } from '$lib/server/auth';
+
+// Throttle auth attempts per client IP to slow down brute-force attacks.
+const AUTH_LIMIT = 10;
+const AUTH_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 export const load: PageServerLoad = ({ locals }) => {
 	if (locals.user) throw redirect(302, '/events');
@@ -27,7 +32,16 @@ const USERNAME_ERROR_MESSAGES: Record<UsernameError, string> = {
 };
 
 export const actions: Actions = {
-	register: async ({ request, cookies }) => {
+	register: async ({ request, cookies, getClientAddress }) => {
+		const ip = getClientAddress();
+		const rl = rateLimit(`auth:${ip}`, AUTH_LIMIT, AUTH_WINDOW_MS);
+		if (!rl.allowed) {
+			return fail(429, {
+				register: true,
+				error: 'Too many attempts. Please try again later.'
+			});
+		}
+
 		const form = await request.formData();
 		const username = getFormString(form, 'username').trim();
 		const password = getFormString(form, 'password');
@@ -70,7 +84,16 @@ export const actions: Actions = {
 		throw redirect(303, '/events');
 	},
 
-	login: async ({ request, cookies }) => {
+	login: async ({ request, cookies, getClientAddress }) => {
+		const ip = getClientAddress();
+		const rl = rateLimit(`auth:${ip}`, AUTH_LIMIT, AUTH_WINDOW_MS);
+		if (!rl.allowed) {
+			return fail(429, {
+				login: true,
+				error: 'Too many attempts. Please try again later.'
+			});
+		}
+
 		const form = await request.formData();
 		const username = getFormString(form, 'username').trim();
 		const password = getFormString(form, 'password');

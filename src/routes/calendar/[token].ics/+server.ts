@@ -8,8 +8,21 @@
  */
 import type { RequestHandler } from './$types';
 import { getUserByCalendarToken, getUserFinalizedMeetings, buildUserFeed } from '$lib/server/feed';
+import { rateLimit } from '$lib/server/rate-limit';
 
-export const GET: RequestHandler = ({ params }) => {
+// Calendar providers poll on a cadence (minutes), so a few per minute is plenty.
+const FEED_LIMIT = 30;
+const FEED_WINDOW_MS = 60 * 1000; // 1 minute
+
+export const GET: RequestHandler = ({ params, getClientAddress }) => {
+	const rl = rateLimit(`feed:${getClientAddress()}`, FEED_LIMIT, FEED_WINDOW_MS);
+	if (!rl.allowed) {
+		return new Response('Rate limited', {
+			status: 429,
+			headers: { 'Retry-After': String(rl.retryAfterSeconds) }
+		});
+	}
+
 	const token = params.token;
 	const userId = getUserByCalendarToken(token);
 	// Return 404 for unknown tokens so attackers can't distinguish a bad token
@@ -25,7 +38,7 @@ export const GET: RequestHandler = ({ params }) => {
 		status: 200,
 		headers: {
 			'Content-Type': 'text/calendar; charset=utf-8',
-			'Content-Disposition': 'inline; filename="find-time-finalized.ics"'
+			'Content-Disposition': 'inline; filename="meet-up-finalized.ics"'
 		}
 	});
 };

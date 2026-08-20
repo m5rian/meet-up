@@ -177,7 +177,7 @@
 		</div>
 	{/if}
 
-	<div class="flex gap-6">
+	<div class="flex flex-col gap-6 lg:flex-row">
 		<HeatmapGrid
 			{heatmap}
 			{editing}
@@ -189,6 +189,10 @@
 			onHover={(row: number, day: number) => (hovered = { row, day })}
 			onLeave={() => (hovered = null)}
 		/>
-		<ParticipantList participants={heatmap.participants} {unavailableIds} class="shrink-0" />
+		<ParticipantList
+			participants={heatmap.participants}
+			{unavailableIds}
+			class="shrink-0 lg:w-56"
+		/>
 	</div>
 </div>

@@ -10,6 +10,7 @@
  * Only computed busy intervals are persisted; raw event details are discarded.
  */
 import { and, eq } from 'drizzle-orm';
+import { lookup } from 'node:dns/promises';
 import { db } from '../db';
 import { calendarBlocks, calendars, syncJobs } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../crypto';
@@ -23,6 +24,7 @@ export type SyncError =
 	| 'no_source'
 	| 'invalid_url'
 	| 'not_https'
+	| 'ssrf_blocked'
 	| 'fetch_failed'
 	| 'parse_failed'
 	| 'no_events'
@@ -35,8 +37,12 @@ const MAX_ICS_BYTES = 5 * 1024 * 1024; // 5 MB upload cap
  * Validate a submitted ICS URL. Only https:// and webcal:// are accepted
  * (CORE.md §5). webcal:// is the scheme iCloud and CalDAV providers publish;
  * it is normalized to https:// so it can be fetched like any other URL.
+ *
+ * SSRF hardening: the hostname is resolved and rejected if it points to a
+ * private, loopback, or link-local address, so the server can't be used to
+ * reach internal networks (CORE.md §5, PLAN.md Phase 5).
  */
-export function validateIcsUrl(raw: string): Result<string, SyncError> {
+export async function validateIcsUrl(raw: string): Promise<Result<string, SyncError>> {
 	const url = raw.trim();
 	if (!url) return err('no_source');
 	let parsed: URL;
@@ -49,8 +55,74 @@ export function validateIcsUrl(raw: string): Result<string, SyncError> {
 	// webcal:// is a non-special scheme, so URL treats it as a relative path and
 	// refuses to rewrite `.protocol`. Normalize by string substitution to https://
 	// (iCloud/CalDAV publish the same resource over https).
-	if (url.startsWith('webcal://')) return ok(`https://${url.slice('webcal://'.length)}`);
-	return ok(url);
+	const normalized = url.startsWith('webcal://') ? `https://${url.slice('webcal://'.length)}` : url;
+
+	if (await isBlockedHost(normalized)) return err('ssrf_blocked');
+	return ok(normalized);
+}
+
+/** True when the URL's host resolves to a private/loopback/link-local address. */
+async function isBlockedHost(url: string): Promise<boolean> {
+	let hostname: string;
+	try {
+		hostname = new URL(url).hostname;
+	} catch {
+		return true;
+	}
+	// Bare hostnames like 'localhost' or 'internal' are always suspicious.
+	if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
+
+	// If the host is already an IP literal, check it directly.
+	if (isPrivateIp(hostname)) return true;
+
+	// Otherwise resolve DNS and check every address. A failure to resolve is
+	// treated as blocked (the fetch would fail anyway, and we'd rather reject
+	// than risk a rebinding attack).
+	try {
+		const { address } = await lookup(hostname);
+		return isPrivateIp(address);
+	} catch {
+		return true;
+	}
+}
+
+/** True when `ip` is a private, loopback, or link-local IPv4/IPv6 address. */
+function isPrivateIp(ip: string): boolean {
+	// IPv4-mapped IPv6 (::ffff:a.b.c.d) → check the embedded IPv4.
+	const v4 = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+	if (v4) return isPrivateIpV4(v4[1]);
+	if (ip.includes(':')) return isPrivateIpV6(ip);
+	return isPrivateIpV4(ip);
+}
+
+function isPrivateIpV4(ip: string): boolean {
+	const parts = ip.split('.').map(Number);
+	if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true;
+	const [a, b] = parts;
+	// 10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 0/8, 100.64/10 (CGNAT).
+	if (a === 10) return true;
+	if (a === 172 && b >= 16 && b <= 31) return true;
+	if (a === 192 && b === 168) return true;
+	if (a === 127) return true;
+	if (a === 169 && b === 254) return true;
+	if (a === 0) return true;
+	if (a === 100 && b >= 64 && b <= 127) return true;
+	return false;
+}
+
+function isPrivateIpV6(ip: string): boolean {
+	const lower = ip.toLowerCase();
+	// ::1 loopback, fc00::/7 unique-local, fe80::/10 link-local, :: unspecified.
+	if (lower === '::1' || lower === '::') return true;
+	if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
+	if (
+		lower.startsWith('fe8') ||
+		lower.startsWith('fe9') ||
+		lower.startsWith('fea') ||
+		lower.startsWith('feb')
+	)
+		return true;
+	return false;
 }
 
 /**
@@ -203,6 +275,8 @@ export function syncErrorMessage(error: SyncError): string {
 			return 'That is not a valid URL.';
 		case 'not_https':
 			return 'Only https:// ICS URLs are accepted.';
+		case 'ssrf_blocked':
+			return 'That address points to a private network and is not allowed.';
 		case 'fetch_failed':
 			return 'Could not reach your calendar. Check the URL and try again.';
 		case 'parse_failed':

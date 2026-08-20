@@ -1,42 +1,101 @@
-# sv
+# 📅 Meet-Up
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A self-hostable "When2Meet"-style tool where availability is shown as a heatmap that
+auto-fills from each participant's connected calendar (ICS URL or file upload). No
+OAuth, no third-party accounts — just ICS.
 
-## Creating a project
+## ✨ Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **Accounts**: username + password signup/login (argon2id), profile pictures, sessions.
+- **Events**: private or link-based; invite users or share a link; auto-join organizer.
+- **Heatmap**: participant-centric grid of free/busy, computed from everyone's calendars,
+  sleep schedules, and manual overrides.
+- **Multiple calendars**: connect any number of live ICS URLs and/or uploaded `.ics` files.
+- **Finalize & invite**: the organizer clicks a slot to set the meeting time and
+  downloads an `.ics` invite.
+- **Per-user calendar feed**: each user gets a private ICS feed of their finalized
+  meetings, so they appear automatically in the user's own calendar app.
+
+## ✨ Setup (local)
+
+Requirements: Node.js >= 22.
 
 ```sh
-# create a new project
-npx sv create my-app
+npm install
+cp .env.example .env       # then fill in DATABASE_PATH and ENCRYPTION_KEY (required)
 ```
 
-To recreate this project with the same configuration:
+Generate an encryption key:
 
 ```sh
-# recreate this project
-npx sv@0.17.0 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:none" sveltekit-adapter="adapter:node" drizzle="database:sqlite+sqlite:better-sqlite3" --no-install .
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-## Developing
+Run migrations, build, and start:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+```sh
+# one-shot: runs migrations, builds, and starts the server
+./start.sh
+
+# or step by step
+npm run db:migrate:run
+npm run build
+npm start
+```
+
+For development:
 
 ```sh
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+### ✨ Environment variables
 
-To create a production version of your app:
+| Variable | Description |
+| --- | --- |
+| `DATABASE_PATH` | Path to the SQLite database file (WAL mode enabled). |
+| `ENCRYPTION_KEY` | **Required.** Hex-encoded 256-bit key for encrypting stored ICS URLs at rest. |
+| `BASE_URL` | Public base URL, used for shareable links and invite/feed URLs. |
+| `ORIGIN` | The scheme + host browsers use to reach the app (CSRF checking + absolute URLs). |
+| `ICS_POLL_INTERVAL_MINUTES` | How often (min) background jobs poll live ICS URLs. Default 30. |
+| `EVENT_TTL_DAYS` | How many days an event lives before being expired. Default 7. |
+
+## Deployment
+
+A sample systemd unit is included at [`deploy/meet-up.service`](deploy/meet-up.service).
+Copy it, adjust `User`/`WorkingDirectory`/`Environment` to your deployment, then:
 
 ```sh
-npm run build
+sudo systemctl daemon-reload
+sudo systemctl enable --now meet-up
 ```
 
-You can preview the production build with `npm run preview`.
+The app is built to a plain `node build` server. Back up the SQLite DB file (ideally
+with `VACUUM INTO` for a consistent snapshot). A load-tested reverse proxy (nginx /
+caddy) in front is recommended to terminate TLS.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Connecting a calendar (per-provider)
+
+On your **Profile → Calendar** page you can add a live ICS URL or upload an `.ics` file.
+The app only stores computed free/busy intervals — never your event titles or details.
+
+To get the secret ICS address for your provider:
+
+| Provider | How to find your ICS URL |
+| --- | --- |
+| **Google Calendar** | Settings → select the calendar → scroll to "Secret address in iCal format" → copy the `private-.../basic.ics` URL. Requires an ICS-only URL, not the HTML one. |
+| **Outlook / Office 365** | Settings → Calendar → "Shared calendars" → "Publish a calendar" → choose ICS → copy the `.ics` link (e.g. `calendar.outlook.com/.../calendar.ics`). |
+| **Apple iCloud** | iCloud Calendar → Share → Public Calendar → "Public URL" → copy the `webcal://pXX-caldav.icloud.com/.../calendar.ics` link. The app accepts `webcal://` and treats it as `https`. |
+| **Nextcloud / Radicale / Baïkal** | Open the calendar's settings and copy the `?export` / webcal ICS URL, or build one from the CalDAV endpoint (`https://host/remote.php/dav/calendars/user/calname` with `?export`). |
+| **Generic / other** | Any service that exposes a `https://` `.ics` export URL works. |
+
+> Only `https://` URLs are accepted (`http://` is rejected). Uploaded files must be `.ics`.
+
+## Automatically getting finalized meetings in your calendar
+
+Once a meeting is **finalized**, you can subscribe to your private feed on the
+**Profile → Calendar feed** page. Copy the feed URL and add it as a "New calendar by
+URL" subscription in your calendar app (Google, Outlook, Apple, Thunderbird, ...).
+New finalized meetings appear once your provider re-polls the feed. Treat the feed
+URL as a secret — anyone with it can see your finalized meetings. Use
+**Regenerate feed URL** to invalidate an old link.

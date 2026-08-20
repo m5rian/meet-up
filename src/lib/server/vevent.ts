@@ -70,7 +70,7 @@ export function buildVevent(ve: VEventData): string {
 		'STATUS:CONFIRMED',
 		// No email on file, so use a neutral mailto; the display name carries the
 		// organizer reference that calendar clients show.
-		`ORGANIZER;CN=${escapeText(ve.organizer_name)}:mailto:no-reply@find-time.local`,
+		`ORGANIZER;CN=${escapeText(ve.organizer_name)}:mailto:no-reply@meet-up.local`,
 		'END:VEVENT'
 	];
 	return foldLines(lines.join('\n'));
@@ -81,7 +81,7 @@ export function wrapCalendar(vevents: string[]): string {
 	const body = [
 		'BEGIN:VCALENDAR',
 		'VERSION:2.0',
-		'PRODID:-//Find-Time//Finalized meetings//EN',
+		'PRODID:-//Meet-Up//Finalized meetings//EN',
 		'CALSCALE:GREGORIAN',
 		...vevents,
 		'END:VCALENDAR'

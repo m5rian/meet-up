@@ -7,7 +7,7 @@
 </script>
 
 <div class="space-y-4">
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-xl font-bold text-gray-900">Your events</h1>
 		<a href={resolve('/events/new')}>
 			<Button type="button">New event</Button>

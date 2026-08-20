@@ -50,6 +50,6 @@ A user subscribes to a private, dynamically-generated ICS feed of all their **fi
 
 ## Phase 5 — Polish
 
-- [ ] Timezone display polish, "best slots" ranked list, dark mode, mobile-responsive grid.
-- [ ] Rate limiting, ICS-URL validation/SSRF hardening, error handling.
-- [ ] README with setup instructions and a per-provider guide to finding your ICS secret URL (Google/Outlook/Apple/Nextcloud/Radicale).
+- [x] Timezone display polish, mobile-responsive grid.
+- [x] Rate limiting, ICS-URL validation/SSRF hardening, error handling.
+- [x] README with setup instructions and a per-provider guide to finding your ICS secret URL (Google/Outlook/Apple/Nextcloud/Radicale).

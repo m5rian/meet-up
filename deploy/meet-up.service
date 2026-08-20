@@ -1,11 +1,11 @@
-# Sample systemd unit for running the built Find-Time server.
+# Sample systemd unit for running the built Meet-Up server.
 #
-# Operators should copy this file to /etc/systemd/system/find-time.service,
+# Operators should copy this file to /etc/systemd/system/meet-up.service,
 # adjust User, WorkingDirectory and Environment to match their deployment,
 # then:
 #
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now find-time
+#   sudo systemctl enable --now meet-up
 #
 # Prerequisites:
 #   - node >= 22 on PATH for the service user
@@ -13,18 +13,18 @@
 #   - ENCRYPTION_KEY (hex) MUST be provided via the EnvironmentFile.
 
 [Unit]
-Description=Find-Time heatmap meeting finder
+Description=Meet-Up heatmap meeting finder
 After=network.target
 
 [Service]
 Type=simple
-User=findtime
-Group=findtime
+User=meetUp
+Group=meetUp
 # Directory containing the built app (node build).
-WorkingDirectory=/opt/find-time
+WorkingDirectory=/opt/meet-up
 ExecStart=/usr/bin/env node build
 # Load environment variables from this file (see .env.example for the format).
-EnvironmentFile=/opt/find-time/.env
+EnvironmentFile=/opt/meet-up/.env
 # Host / port handled by the app via env, e.g.:
 Environment=HOST=0.0.0.0
 Environment=PORT=3000
@@ -37,7 +37,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 # Allow the app to write its SQLite DB inside the working directory.
-ReadWritePaths=/opt/find-time
+ReadWritePaths=/opt/meet-up
 
 [Install]
 WantedBy=multi-user.target

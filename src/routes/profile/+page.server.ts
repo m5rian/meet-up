@@ -9,6 +9,11 @@ import { isTimeOfDay } from '$lib/server/time';
 import { getFormString } from '$lib/server/form';
 import type { CalendarConnection, UserProfile } from '$lib/types';
 import { setCalendarToken } from '$lib/server/feed';
+import { rateLimit } from '$lib/server/rate-limit';
+
+// Throttle calendar URL fetch/sync so a client can't hammer upstream providers.
+const ICS_FETCH_LIMIT = 5;
+const ICS_FETCH_WINDOW_MS = 60 * 1000; // 1 minute
 import {
 	createCalendar,
 	fetchIcsBlocks,
@@ -144,15 +149,22 @@ export const actions: Actions = {
 		return { sleepSaved: true };
 	},
 
-	'add-calendar': async ({ request, locals }) => {
+	'add-calendar': async ({ request, locals, getClientAddress }) => {
 		if (!locals.user) throw redirect(302, '/');
+
+		// Rate-limit URL fetching per client IP (file uploads don't hit the network).
+		const rl = rateLimit(`ics-fetch:${getClientAddress()}`, ICS_FETCH_LIMIT, ICS_FETCH_WINDOW_MS);
+		if (!rl.allowed) {
+			return fail(429, { calendarError: 'Too many requests. Please try again shortly.' });
+		}
+
 		const form = await request.formData();
 		const name = getFormString(form, 'name').trim();
 		const source = getFormString(form, 'source') === 'file' ? 'file' : 'url';
 
 		if (source === 'url') {
 			const url = getFormString(form, 'ics_url');
-			const validated = validateIcsUrl(url);
+			const validated = await validateIcsUrl(url);
 			if (!validated.ok) {
 				return fail(400, { calendarError: syncErrorMessage(validated.error) });
 			}

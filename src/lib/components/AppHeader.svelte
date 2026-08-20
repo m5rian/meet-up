@@ -18,7 +18,7 @@
 			class="flex items-center gap-2 text-lg font-semibold text-gray-900"
 		>
 			<CalendarIcon class="h-5 w-5 text-indigo-600" />
-			Find-Time
+			Meet-Up
 		</a>
 		<nav class="flex items-center gap-3">
 			<a
