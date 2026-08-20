@@ -1,0 +1,27 @@
+# Docker Compose for Meet-Up.
+#
+# Usage:
+#   cp .env.example .env   # fill in DATABASE_PATH, ENCRYPTION_KEY, ORIGIN, ...
+#   docker compose up --build -d
+#
+# The SQLite database lives on a named volume so it survives container rebuilds.
+# Only the app container runs; there is no separate DB service (SQLite is a file).
+
+services:
+  meet-up:
+    build: .
+    image: meet-up:latest
+    container_name: meet-up
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - meet-up-data:/app/data
+    environment:
+      # Store the DB inside the mounted volume so it persists.
+      DATABASE_PATH: /app/data/data.db
+
+volumes:
+  meet-up-data:

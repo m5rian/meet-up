@@ -50,7 +50,6 @@
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",
-		"tsx": "^4.23.12",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
 		"vite": "^8.0.16"
@@ -60,6 +59,7 @@
 		"better-sqlite3": "^13.0.2",
 		"luxon": "^3.7.2",
 		"node-ical": "^0.27.1",
-		"sharp": "^0.35.3"
+		"sharp": "^0.35.3",
+		"tsx": "^4.23.12"
 	}
 }

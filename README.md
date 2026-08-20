@@ -60,19 +60,26 @@ npm run dev
 | `ICS_POLL_INTERVAL_MINUTES` | How often (min) background jobs poll live ICS URLs. Default 30. |
 | `EVENT_TTL_DAYS` | How many days an event lives before being expired. Default 7. |
 
-## Deployment
+## Deployment (Docker)
 
-A sample systemd unit is included at [`deploy/meet-up.service`](deploy/meet-up.service).
-Copy it, adjust `User`/`WorkingDirectory`/`Environment` to your deployment, then:
+The repo ships a `Dockerfile` and `docker-compose.yml`. The compose service builds
+and runs the app, applies migrations on startup, and keeps the SQLite database on a
+named volume so data survives rebuilds.
 
 ```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now meet-up
+cp .env.example .env       # fill in ENCRYPTION_KEY, ORIGIN, PORT (optional), ...
+
+docker compose up --build -d
 ```
 
-The app is built to a plain `node build` server. Back up the SQLite DB file (ideally
-with `VACUUM INTO` for a consistent snapshot). A load-tested reverse proxy (nginx /
-caddy) in front is recommended to terminate TLS.
+The app listens on port `3000` inside the container and is published on
+`${PORT:-3000}` on the host. To stop: `docker compose down`. The database persists
+in the `meet-up-data` volume regardless of container rebuilds.
+
+If you prefer to run without containers, `./start.sh` runs migrations, builds, and
+starts the server directly (`npm run build && node build`). Back up the SQLite DB
+file (ideally with `VACUUM INTO` for a consistent snapshot). A load-tested reverse
+proxy (nginx / caddy) in front is recommended to terminate TLS.
 
 ## Connecting a calendar (per-provider)
 
