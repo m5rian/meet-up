@@ -50,11 +50,13 @@ Single tier, deliberately:
 
 ## 4. Data Flows (implemented via loaders & form actions)
 
-Per the architecture doc, the app exposes **no raw API endpoints**. Each of the operations below is realized as a SvelteKit server `load` (for reads) or a **form action** (for writes), so the client never makes direct API calls. Aside from `/` (registration/login), all routes and actions require a logged-in session:
+Per the architecture doc, the app exposes **no raw API endpoints**. Each of the operations below is realized as a SvelteKit server `load` (for reads) or a **form action** (for writes), so the client never makes direct API calls. Auth is a single external OIDC provider; aside from `/` and the `/auth*` routes, all routes and actions require a logged-in session:
 
 ```
 Reads (server loaders)
-GET   /                           registration / login (no landing page)
+GET   /                           sign-in page (redirects to OIDC provider)
+GET   /auth                       start OIDC authorization-code flow (redirect to IdP)
+GET   /auth/callback              OIDC callback: exchange code, upsert user, create session
 GET   /events                     list of events the user is invited to or joined
 GET   /events/new                 create-event form
 GET   /events/:slug               public event + aggregated heatmap data (link events: any logged-in user; private: invited users only)
@@ -63,13 +65,12 @@ GET   /profile                    current user's profile: picture upload + calen
 GET   /sync-status                 current user's last-synced time / last error, for the "last synced" UI
 
 Writes (form actions, use:enhance)
-POST  register                    create account (unique username + password)
-POST  login                       authenticate with username + password (cookie session)
 POST  logout                      clear session
 POST  create-event                create event (private or link), returns slug + shareable link
 POST  invite                      invite a registered user by name (private events)
 POST  join                        join a link event as a participant
 POST  update-profile-picture      upload/resize a 32×32 profile picture
+POST  update-timezone             set the user's IANA time zone
 POST  submit-ics-url              submit/update a live ICS URL (per-user, triggers immediate fetch + starts polling)
 POST  upload-ics-file             upload a one-off .ics file (parsed once, no polling)
 POST  update-sleep-schedule       set/clear the user's recurring daily sleep window (sleep_start / sleep_end, local times)
@@ -98,8 +99,8 @@ Once a meeting is finalized, participants should get it in their own calendars a
 - Never log ICS URLs or raw calendar payloads.
 - Only persist computed busy/free intervals, not event titles/locations — call this out explicitly in the UI ("we never see your event details, only free/busy") since it's a strong selling point for an ICS-only, OAuth-free tool.
 - Rate-limit ICS fetch/polling per user to avoid hammering upstream calendar providers (and to avoid the tool itself being used to hit arbitrary URLs — validate the submitted URL is `https://` and parse it with the same ICS library used for reading, as basic SSRF hygiene since the server is fetching a user-supplied URL).
-- CSRF protection on all mutating form actions (SvelteKit's `use:enhance` uses the `Origin`-checked form post, and custom form actions carry an anti-CSRF token). Access is gated by the logged-in session cookie: private events are only viewable by invited users, and only the organizer can finalize.
-- Provide a `.env.example` — with ICS-only scope this is `DATABASE_PATH`, `ENCRYPTION_KEY` (hex, required), `BASE_URL`, `ICS_POLL_INTERVAL_MINUTES` (default 30), `EVENT_TTL_DAYS` (default 7). Only `https://` ICS URLs are accepted (no `http://`). No third-party app registration required anywhere in setup.
+- CSRF protection on all mutating form actions (SvelteKit's `use:enhance` uses the `Origin`-checked form post, and custom form actions carry an anti-CSRF token). The OIDC callback is a GET, so it is protected by the OIDC `state`/`nonce` parameters (stored in an httpOnly cookie, validated by `openid-client` on callback). Access is gated by the logged-in session cookie: private events are only viewable by invited users, and only the organizer can finalize.
+- Provide a `.env.example` — auth requires `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (+ optional `OIDC_SCOPE`, `OIDC_USERNAME_CLAIM`, `OIDC_REDIRECT_URI`); calendar/ICS scope needs `DATABASE_PATH`, `ENCRYPTION_KEY` (hex, required), `BASE_URL`, `ORIGIN`, `ICS_POLL_INTERVAL_MINUTES` (default 30), `EVENT_TTL_DAYS` (default 7). Only `https://` ICS URLs are accepted (no `http://`).
 
 ---
 

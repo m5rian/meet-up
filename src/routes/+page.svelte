@@ -1,16 +1,22 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
-	import { Button, FormField } from '$lib/components';
+	import { resolve } from '$app/paths';
+	import { Button } from '$lib/components';
 
 	let {
-		form
-	}: { form: { register?: boolean; login?: boolean; username?: string; error?: string } | null } =
-		$props();
+		data
+	}: {
+		data: { error: string | null };
+	} = $props();
 
-	const registerError = $derived(form?.register ? form.error : undefined);
-	const loginError = $derived(form?.login ? form.error : undefined);
-	const username = $derived(form?.username ?? '');
-	const timezone = $derived(Intl.DateTimeFormat().resolvedOptions().timeZone);
+	const errorMessage = $derived(
+		data.error === 'missing_username'
+			? 'Sign-in failed: the account did not provide a valid username. Contact your administrator to fix the identity provider profile.'
+			: data.error === 'username_taken'
+				? 'Sign-in failed: this username is already in use. Contact your administrator to resolve the conflict.'
+				: data.error
+					? 'Sign-in failed. Please try again.'
+					: null
+	);
 </script>
 
 <div class="mx-auto max-w-md">
@@ -19,54 +25,16 @@
 		Schedule meetings with a heatmap of everyone's availability.
 	</p>
 
-	<div class="grid grid-cols-1 gap-6">
-		<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Create an account</h2>
-			<form method="POST" action="?/register" use:enhance class="space-y-4">
-				<FormField
-					label="Username"
-					name="username"
-					value={username}
-					required
-					autocomplete="username"
-					error={registerError}
-				/>
-				<FormField
-					label="Password"
-					type="password"
-					name="password"
-					required
-					autocomplete="new-password"
-					hint="At least 12 characters, with a number, a letter, and a symbol."
-					error={registerError}
-				/>
-				<input type="hidden" name="timezone" value={timezone} />
-				<Button type="submit" class="w-full">Register</Button>
-			</form>
-		</section>
+	<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+		<h2 class="mb-1 text-lg font-semibold text-gray-900">Sign in</h2>
+		<p class="mb-4 text-sm text-gray-500">Use your organization's account to sign in.</p>
 
-		<section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Log in</h2>
-			<form method="POST" action="?/login" use:enhance class="space-y-4">
-				<FormField
-					label="Username"
-					name="username"
-					value={username}
-					required
-					autocomplete="username"
-					error={loginError}
-				/>
-				<FormField
-					label="Password"
-					type="password"
-					name="password"
-					required
-					autocomplete="current-password"
-					error={loginError}
-				/>
-				<input type="hidden" name="timezone" value={timezone} />
-				<Button type="submit" class="w-full">Log in</Button>
-			</form>
-		</section>
-	</div>
+		{#if errorMessage}
+			<div class="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage}</div>
+		{/if}
+
+		<a href={resolve('/auth')} class="block w-full">
+			<Button class="w-full">Sign in with your account</Button>
+		</a>
+	</section>
 </div>

@@ -15,7 +15,8 @@ export const users = sqliteTable(
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
 		username: text('username').notNull().unique(),
-		password_hash: text('password_hash').notNull(),
+		oidc_sub: text('oidc_sub').notNull(), // the IdP's subject claim; the unique link to the identity.
+		oidc_issuer: text('oidc_issuer').notNull(), // the OIDC issuer the subject belongs to (allows future multi-IdP).
 		profile_picture: text('profile_picture'), // base64 (or NULL). Always resized to 32×32 on upload.
 		tz_id: text('tz_id'), // IANA time zone id, auto-detected from the browser.
 		calendar_token: text('calendar_token'), // secret per-user token for the private ICS feed (ARCHITECTURE.md §5.2). NULL until generated.
@@ -25,7 +26,10 @@ export const users = sqliteTable(
 			.notNull()
 			.$defaultFn(() => new Date())
 	},
-	(table) => [uniqueIndex('users_username_unique').on(table.username)]
+	(table) => [
+		uniqueIndex('users_username_unique').on(table.username),
+		uniqueIndex('users_oidc_sub_unique').on(table.oidc_sub)
+	]
 );
 
 export const events = sqliteTable('events', {

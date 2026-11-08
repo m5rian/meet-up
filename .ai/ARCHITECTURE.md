@@ -18,9 +18,10 @@ This doc covers the tech stack, data model, and repository layout for the Heatma
 | Calendar parsing | `ical.js` or `node-ical` | ICS VEVENT parsing → free/busy intervals; also used to validate submitted ICS URLs |
 | Linting | ESLint with `typescript-eslint` + `eslint-plugin-svelte` | Catches type errors, unused imports, and Svelte-specific anti-patterns at build/CI time |
 | Sessions | SvelteKit native cookie sessions | Cookie-based auth, no extra session library |
+| Auth | Single external OIDC provider (`openid-client`, authorization code + PKCE) | All accounts sign in via one IdP (Google, Keycloak, Auth0, …); the app never sees a password |
 | Formatting | Prettier with `prettier-plugin-svelte` + `prettier-plugin-tailwindcss` | Auto-formatting that respects Svelte template syntax and Tailwind class ordering — enforced consistently across the team (or solo agent sessions) |
 
-This is a deliberately narrow scope: no OAuth client IDs/secrets to register, no token refresh logic, no per-provider API quirks. The tradeoff is that participants must know how to find their calendar's private ICS URL (a short one-time setup step, well documented per-provider in the app's onboarding UI) rather than clicking "Sign in with Google."
+This is a deliberately narrow scope: calendar sync is ICS-only (no OAuth, no CalDAV client, no per-provider API quirks). Participants connect their calendar via a private ICS URL (a short one-time setup step, well documented per-provider in the app's onboarding UI) rather than clicking "Sign in with Google" for their calendar. App *authentication*, by contrast, uses a single external OIDC provider so no username/password data is stored.
 
 ### TypeScript & server-side data loading
 
@@ -33,8 +34,10 @@ This is a deliberately narrow scope: no OAuth client IDs/secrets to register, no
 ## 2. Data Model (SQLite via Drizzle)
 
 ```
-users(id, username UNIQUE, password_hash, profile_picture, tz_id, sleep_start, sleep_end, created_at, calendar_token)
-       -- tz_id = user's auto-detected IANA time zone ID (e.g. 'America/New_York'), captured from the browser
+users(id, username UNIQUE, oidc_sub, oidc_issuer, profile_picture, tz_id, sleep_start, sleep_end, created_at, calendar_token)
+       -- oidc_sub = the OIDC provider's subject claim; the unique link to the identity (UNIQUE)
+       -- oidc_issuer = the issuer the subject belongs to (allows future multi-IdP)
+       -- tz_id = user's IANA time zone ID (e.g. 'America/New_York'), set on the profile page
        -- sleep_start / sleep_end = LOCAL wall-clock times-of-day 'HH:mm:ss' (e.g. '23:00:00' / '07:00:00'),
        --   the user's recurring daily sleep window, interpreted in the user's tz_id; NULL = no sleep block set.
        --   Overnight windows (sleep_end < sleep_start) span midnight, per the same rule as event time windows (§3.2).
@@ -61,9 +64,9 @@ Notes for SQLite specifically:
 - **Timestamps.** SQLite has no native `TIMESTAMPTZ` type, so all absolute timestamps are stored as ISO 8601 UTC strings (`YYYY-MM-DDTHH:mm:ssZ`, TEXT) — never fixed numeric offsets like `+04:00`, since offsets shift with Daylight Saving Time (DST). The canonical time zone is stored separately as an IANA time zone ID string (`events.tz_id`, e.g. `America/New_York`).
 - **Daily time windows are NOT absolute timestamps.** `events.time_window_start` / `events.time_window_end` are local wall-clock times-of-day (`HH:mm:ss`) interpreted in the event's `tz_id`; their UTC equivalent is derived dynamically per target date (see §3.2).
 - **Date ranges are date-only.** `events.date_range_start` / `events.date_range_end` are stored as `YYYY-MM-DD` strings interpreted in the event's `tz_id`; the range opens at `00:00:00` on the start date and closes at `23:59:59` on the end date within `tz_id`.
-- **User time zones.** Each user's time zone is auto-detected from their browser (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and stored in `users.tz_id`. The organizer's `users.tz_id` is copied to `events.tz_id` at event creation (the event's canonical time zone).
+- **User time zones.** Each user sets their IANA time zone on the profile page (stored in `users.tz_id`; NULL until set). The organizer's `users.tz_id` is copied to `events.tz_id` at event creation (the event's canonical time zone).
 - **Sleep schedule (per-user base busy block).** Each user can set a recurring daily sleep window (`users.sleep_start` / `users.sleep_end`, local wall-clock `HH:mm:ss` interpreted in `users.tz_id`). It is a per-user setting managed on the profile page alongside the profile picture and calendar connection. When set, the sleep window is treated as a **base busy block** for the user's availability: it is merged into the auto calendar (the user is busy during sleep hours regardless of what their calendar shows) and it pre-fills the manual-override grid as busy. Manual overrides still take precedence — a manual `busy: 0` block can mark a sleep hour as actually free, and a manual `busy: 1` block can mark a non-sleep hour as busy. The sleep window is expanded to UTC dynamically per date using the same DST-aware logic as event time windows (§3.2), including overnight windows that span midnight. It is per-user (not per-event), so it applies to every event the user participates in, exactly like `calendar_blocks`.
-- **Accounts are required.** Every user has a `users` row identified by `username` + `password_hash`. Usernames are **unique** — they are the login identifier, and are capped at **32 characters**. Passwords are hashed with **argon2id** and must be **at least 12 characters** and contain **at least one number, one alphabetical character, and one symbol**. No email on file. Each user has a `profile_picture` so people can recognize each other at a glance.
+- **Accounts are required.** Every user has a `users` row identified by `oidc_sub` (the provider's subject claim, unique) and `username` (unique). Usernames are taken verbatim from the configured OIDC profile claim (`OIDC_USERNAME_CLAIM`, default `preferred_username`) and are not editable in-app. No password is ever stored, and no email is stored on file. Each user has a `profile_picture` so people can recognize each other at a glance.
 - **Profile pictures** are stored as blobs in the DB, always resized to **32×32** on upload (no other sizes are kept).
 - **Access is managed through the logged-in user** (`events.organizer_id` and `participants.user_id` reference `users`) — there are no shareable edit tokens. Sessions use cookies.
 - **Two event types, both with a link:** `visibility = 'link'` events are joinable by any logged-in user via the link; `visibility = 'private'` events are only viewable by users who are invited (membership tracked in `participants`). The `slug` is a non-secret identifier: it points to an event, but without access (login + invitation for private events) nothing can be derived from it.

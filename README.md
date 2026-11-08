@@ -2,11 +2,12 @@
 
 A self-hostable "When2Meet"-style tool where availability is shown as a heatmap that
 auto-fills from each participant's connected calendar (ICS URL or file upload). No
-OAuth, no third-party accounts — just ICS.
+calendar OAuth — calendars are connected via secret ICS URLs, and no third-party
+account details are stored. Sign-in uses a single external OIDC provider.
 
 ## ✨ Features
 
-- **Accounts**: username + password signup/login (argon2id), profile pictures, sessions.
+- **Accounts**: single sign-on via an external OIDC provider (Google, Keycloak, Auth0, …), profile pictures, sessions.
 - **Events**: private or link-based; invite users or share a link; auto-join organizer.
 - **Heatmap**: participant-centric grid of free/busy, computed from everyone's calendars,
   sleep schedules, and manual overrides.
@@ -22,7 +23,7 @@ Requirements: Node.js >= 22.
 
 ```sh
 npm install
-cp .env.example .env       # then fill in DATABASE_PATH and ENCRYPTION_KEY (required)
+cp .env.example .env       # then fill in DATABASE_PATH, ENCRYPTION_KEY, and the OIDC_* vars
 ```
 
 Generate an encryption key:
@@ -30,6 +31,15 @@ Generate an encryption key:
 ```sh
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+Then register an OIDC client on your provider and set `OIDC_ISSUER`,
+`OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`. The default redirect URI is
+`${BASE_URL}/auth/callback` and must be added to the provider's allowed redirect URIs.
+
+> **Local dev against an http-only IdP** (e.g. Keycloak/Auth0 at
+> `http://localhost:8080`): `openid-client` rejects plain `http://` issuers. Set
+> `OIDC_ALLOW_INSECURE=true` to allow it. This is for development only — never
+> enable it in production.
 
 Run migrations, build, and start:
 
@@ -55,8 +65,15 @@ npm run dev
 | --- | --- |
 | `DATABASE_PATH` | Path to the SQLite database file (WAL mode enabled). |
 | `ENCRYPTION_KEY` | **Required.** Hex-encoded 256-bit key for encrypting stored ICS URLs at rest. |
-| `BASE_URL` | Public base URL, used for shareable links and invite/feed URLs. |
-| `ORIGIN` | The scheme + host browsers use to reach the app (CSRF checking + absolute URLs). |
+| `BASE_URL` | Public base URL, used for shareable links, invite/feed URLs, and the OIDC redirect URI. |
+| `ORIGIN` | The scheme + host browsers use to reach the app (CSRF checking + absolute URLs). Set to `https://…` in production so auth cookies are Secure. |
+| `OIDC_ISSUER` | **Required.** Issuer URL of the OIDC provider used for discovery. |
+| `OIDC_CLIENT_ID` | **Required.** OIDC client ID registered on the provider. |
+| `OIDC_CLIENT_SECRET` | **Required.** OIDC client secret. |
+| `OIDC_SCOPE` | Space-separated scopes to request. Default `openid profile`. |
+| `OIDC_USERNAME_CLAIM` | Claim holding the user's username. Default `preferred_username`; set to `email` if the provider uses email. |
+| `OIDC_REDIRECT_URI` | Override for the OIDC redirect URI. Default `${BASE_URL}/auth/callback`. |
+| `OIDC_ALLOW_INSECURE` | **Local dev only.** Set `true` to allow a plain `http://` OIDC issuer (e.g. a local Keycloak/Auth0). Never enable in production. |
 | `ICS_POLL_INTERVAL_MINUTES` | How often (min) background jobs poll live ICS URLs. Default 30. |
 | `EVENT_TTL_DAYS` | How many days an event lives before being expired. Default 7. |
 

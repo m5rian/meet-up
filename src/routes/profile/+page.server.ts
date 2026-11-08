@@ -79,7 +79,7 @@ export const load: PageServerLoad = ({ locals }) => {
 	if (!calendarToken) {
 		calendarToken = setCalendarToken(row.id);
 	}
-	const baseUrl = env.BASE_URL.replace(/\/$/, '');
+	const baseUrl = (env.BASE_URL || '').replace(/\/$/, '');
 	const calendarFeedUrl = `${baseUrl}/calendar/${calendarToken}.ics`;
 
 	return { profile, calendars, feedUrl: calendarFeedUrl };
@@ -147,6 +147,19 @@ export const actions: Actions = {
 			.where(eq(users.id, locals.user.id))
 			.run();
 		return { sleepSaved: true };
+	},
+
+	'update-timezone': async ({ request, locals }) => {
+		if (!locals.user) throw redirect(302, '/');
+		const form = await request.formData();
+		const tz = getFormString(form, 'timezone').trim();
+
+		if (!Intl.supportedValuesOf('timeZone').includes(tz)) {
+			return fail(400, { timezoneError: 'Choose a valid time zone.' });
+		}
+
+		db.update(users).set({ tz_id: tz }).where(eq(users.id, locals.user.id)).run();
+		return { timezoneSaved: true };
 	},
 
 	'add-calendar': async ({ request, locals, getClientAddress }) => {

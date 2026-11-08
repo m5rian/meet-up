@@ -7,6 +7,7 @@
  */
 import type { Cookies } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { db } from './db';
 import { sessions, users } from './db/schema';
 import { generateSessionToken, hashSessionToken } from './crypto';
@@ -28,9 +29,17 @@ export function setSessionCookie(cookies: Cookies, token: string): void {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: false, // self-hosted; operators can terminate TLS in front of the app
+		// TLS is normally terminated in front of the app; mark the cookie secure
+		// when the public origin is https so it is only sent over TLS.
+		secure: originSecure(),
 		maxAge: SESSION_TTL_MS / 1000
 	});
+}
+
+/** Whether the public origin is https (so cookies are marked Secure). */
+function originSecure(): boolean {
+	const origin = env.ORIGIN;
+	return origin ? origin.startsWith('https://') : false;
 }
 
 export function clearSessionCookie(cookies: Cookies): void {
