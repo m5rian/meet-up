@@ -73,7 +73,7 @@ async function isBlockedHost(url: string): Promise<boolean> {
 	if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
 
 	// If the host is already an IP literal, check it directly.
-	if (isPrivateIp(hostname)) return true;
+	if (isIpLiteral(hostname) && isPrivateIp(hostname)) return true;
 
 	// Otherwise resolve DNS and check every address. A failure to resolve is
 	// treated as blocked (the fetch would fail anyway, and we'd rather reject
@@ -84,6 +84,14 @@ async function isBlockedHost(url: string): Promise<boolean> {
 	} catch {
 		return true;
 	}
+}
+
+/** True when `host` is an IPv4 or IPv6 literal (not a DNS hostname). */
+function isIpLiteral(host: string): boolean {
+	// IPv4: four dot-separated decimal octets.
+	if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) return true;
+	// IPv6: contains a colon and no dot-hex suffix (e.g. a.b.c.d).
+	return host.includes(':');
 }
 
 /** True when `ip` is a private, loopback, or link-local IPv4/IPv6 address. */
