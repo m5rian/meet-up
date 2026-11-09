@@ -66,7 +66,7 @@ export const load: PageServerLoad = ({ params, locals }) => {
 		inviteCandidates = allUsers.filter((u) => u.id !== viewerId && !invitedSet.has(u.id));
 	}
 
-	const baseUrl = env.BASE_URL;
+	const baseUrl = (env.BASE_URL || '').replace(/\/$/, '');
 	const shareUrl = baseUrl ? `${baseUrl}/events/${event.slug}` : `/events/${event.slug}`;
 
 	return {
