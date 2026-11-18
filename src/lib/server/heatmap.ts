@@ -227,6 +227,27 @@ export function buildHeatmap(event: EventRow, viewerId: string, viewerTzId: stri
 	const days = buildDays(event.date_range_start, event.date_range_end, viewerTzId);
 	const rows = buildRows(event, viewerTzId);
 
+	// Each counted participant's final busy intervals only depend on the event's
+	// date range, not on the cell. Compute them once up front instead of once per
+	// grid cell (previously O(rows × days × participants) recomputation).
+	const busyByParticipant = new Map(
+		counted.map((a) => [
+			a.participant.id,
+			computeBusyIntervals(
+				{
+					sleep: a.sleep,
+					tz_id: a.tz_id,
+					calendar_blocks: a.calendar_blocks,
+					manual_busy: a.manual_busy,
+					manual_free: a.manual_free
+				},
+				event.date_range_start,
+				event.date_range_end
+			)
+		])
+	);
+	const notResponded = availabilities.filter((a) => !counted.includes(a)).map((a) => a.participant);
+
 	const cells: HeatmapSlot[][] = [];
 	for (const row of rows) {
 		const rowCells: HeatmapSlot[] = [];
@@ -238,26 +259,10 @@ export function buildHeatmap(event: EventRow, viewerId: string, viewerTzId: stri
 			};
 			const free: ParticipantSummary[] = [];
 			const busy: ParticipantSummary[] = [];
-			const notResponded: ParticipantSummary[] = [];
 			for (const a of counted) {
-				const busyBlocks = computeBusyIntervals(
-					{
-						sleep: a.sleep,
-						tz_id: a.tz_id,
-						calendar_blocks: a.calendar_blocks,
-						manual_busy: a.manual_busy,
-						manual_free: a.manual_free
-					},
-					event.date_range_start,
-					event.date_range_end
-				);
-				if (isBusyAt(slot, busyBlocks)) busy.push(a.participant);
+				const busyBlocks = busyByParticipant.get(a.participant.id);
+				if (busyBlocks && isBusyAt(slot, busyBlocks)) busy.push(a.participant);
 				else free.push(a.participant);
-			}
-			// Not-responded participants (pending invites on private events) are
-			// excluded from the grid entirely and shown separately.
-			for (const a of availabilities) {
-				if (!counted.includes(a)) notResponded.push(a.participant);
 			}
 			const freeRatio =
 				free.length + busy.length > 0 ? free.length / (free.length + busy.length) : 0;
