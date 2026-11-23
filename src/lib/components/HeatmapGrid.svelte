@@ -45,7 +45,9 @@
 		'bg-green-900'
 	];
 
-	const colorByCount = (() => {
+	// Derived (not computed once) so the scale follows the heatmap prop, e.g.
+	// when the member filter changes which participants are counted.
+	const colorByCount = $derived.by(() => {
 		const counts: Record<number, true> = {};
 		for (const row of heatmap.cells) {
 			for (const cell of row) {
@@ -60,7 +62,7 @@
 			map[count] = PALETTE[Math.min(i, PALETTE.length - 1)];
 		});
 		return map;
-	})();
+	});
 
 	function cellColor(cell: HeatmapSlot): string {
 		return colorByCount[cell.free.length] ?? 'bg-white';
