@@ -192,7 +192,7 @@
 		<ParticipantList
 			participants={heatmap.participants}
 			{unavailableIds}
-			class="shrink-0 lg:w-56"
+			class="shrink-0 lg:sticky lg:top-4 lg:w-56 lg:self-start"
 		/>
 	</div>
 </div>
