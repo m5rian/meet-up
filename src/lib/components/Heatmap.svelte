@@ -83,6 +83,41 @@
 		busyCells[key] = !busyCells[key];
 	}
 
+	// Drag-to-paint: the cell where the drag starts decides the paint value (its
+	// toggled state), and every cell in the rectangle between that anchor and the
+	// pointer is set to it. Painting from a snapshot lets the rectangle shrink
+	// again when the pointer moves back.
+	let drag: {
+		row: number;
+		day: number;
+		value: boolean;
+		base: Record<string, boolean>;
+		last: string;
+	} | null = null;
+
+	function paintStart(row: number, day: number): void {
+		drag = {
+			row,
+			day,
+			value: !busyCells[cellKey(row, day)],
+			base: { ...busyCells },
+			last: ''
+		};
+		paintTo(row, day);
+	}
+
+	function paintTo(row: number, day: number): void {
+		if (!drag || drag.last === cellKey(row, day)) return;
+		drag.last = cellKey(row, day);
+		const next = { ...drag.base };
+		for (let r = Math.min(drag.row, row); r <= Math.max(drag.row, row); r++) {
+			for (let d = Math.min(drag.day, day); d <= Math.max(drag.day, day); d++) {
+				next[cellKey(r, d)] = drag.value;
+			}
+		}
+		busyCells = next;
+	}
+
 	// Compute the manual override deltas and submit them.
 	function onSave(event: SubmitEvent): void {
 		const auto = autoBusyCells();
@@ -129,6 +164,8 @@
 		onSelectSlot(start, end);
 	}
 </script>
+
+<svelte:window onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)} />
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
@@ -185,6 +222,8 @@
 			{selectedStart}
 			{busyCells}
 			onToggle={toggleCell}
+			onPaintStart={paintStart}
+			onPaintMove={paintTo}
 			onSelect={handleSelect}
 			onHover={(row: number, day: number) => (hovered = { row, day })}
 			onLeave={() => (hovered = null)}

@@ -6,8 +6,11 @@
 		/** When true, this cell is the currently selected final slot. */
 		selected: boolean;
 		busy: boolean;
+		/** `row:day` key, read by the grid to resolve the cell under a drag pointer. */
+		cellKey: string;
 		colorClass: string;
 		onToggle: () => void;
+		onPaintStart: () => void;
 		onSelect: () => void;
 		onHover: () => void;
 		onLeave: () => void;
@@ -18,8 +21,10 @@
 		selectable,
 		selected,
 		busy,
+		cellKey,
 		colorClass,
 		onToggle,
+		onPaintStart,
 		onSelect,
 		onHover,
 		onLeave
@@ -31,10 +36,19 @@
 		type="button"
 		role="gridcell"
 		aria-label="Toggle availability"
-		class="h-8 w-full cursor-pointer transition-colors {busy
+		aria-selected={busy}
+		data-cell={cellKey}
+		class="h-8 w-full cursor-pointer touch-none transition-colors {busy
 			? 'bg-indigo-500 hover:bg-indigo-400'
 			: 'bg-white hover:bg-indigo-100'}"
-		onclick={onToggle}
+		onpointerdown={(e) => {
+			if (e.button === 0) onPaintStart();
+		}}
+		onclick={(e) => {
+			// Pointer clicks are handled by the drag on pointerdown; only keyboard
+			// activation (Enter/Space, detail === 0) toggles here.
+			if (e.detail === 0) onToggle();
+		}}
 	></button>
 {:else if selectable}
 	<button
