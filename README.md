@@ -59,6 +59,53 @@ For development:
 npm run dev
 ```
 
+### 🧪 Development (local testing)
+
+> **Node version:** you must use **Node.js >= 22**. `better-sqlite3@13` requires it —
+> running on Node 20 crashes the app with a native module access violation. Check with
+> `node --version` and switch if needed (e.g. with nvm: `nvm use 22`).
+
+The app authenticates through an external OIDC provider. For quick local testing you
+don't need a real IdP — a built-in **mock OIDC provider** ships with the repo.
+
+1. **Apply migrations** (creates the tables your DB needs):
+
+   ```sh
+   npm run db:migrate:run
+   ```
+
+2. **Start the mock OIDC provider** in one terminal:
+
+   ```sh
+   npm run mock-oidc
+   ```
+
+   It listens on `http://localhost:8080` and auto-approves every login as the user
+   `tester` (override with `MOCK_OIDC_USERNAME`).
+
+3. **Start the app** in a second terminal:
+
+   ```sh
+   npm run dev
+   ```
+
+   Open `http://localhost:5173` and click **Sign in** — the flow bounces through the
+   mock provider and logs you in instantly.
+
+The `.env` values to use with the mock provider:
+
+```sh
+OIDC_ISSUER=http://localhost:8080
+OIDC_CLIENT_ID=meetup-test
+OIDC_CLIENT_SECRET=local-test-secret
+OIDC_ALLOW_INSECURE=true          # allows the http:// mock issuer
+MOCK_OIDC_USERNAME=tester          # username used for every mock sign-in
+ORIGIN=http://localhost:5173       # scheme + host you open in the browser
+```
+
+These are **local testing only** — replace them with your real IdP credentials and set
+`OIDC_ALLOW_INSECURE=false` before deploying.
+
 ### ✨ Environment variables
 
 | Variable | Description |
@@ -74,6 +121,8 @@ npm run dev
 | `OIDC_USERNAME_CLAIM` | Claim holding the user's username. Default `preferred_username`; set to `email` if the provider uses email. |
 | `OIDC_REDIRECT_URI` | Override for the OIDC redirect URI. Default `${BASE_URL}/auth/callback`. |
 | `OIDC_ALLOW_INSECURE` | **Local dev only.** Set `true` to allow a plain `http://` OIDC issuer (e.g. a local Keycloak/Auth0). Never enable in production. |
+| `MOCK_OIDC_USERNAME` | **Mock provider only.** Username used for every mock sign-in. Default `tester`. |
+| `MOCK_OIDC_PORT` | **Mock provider only.** Port the mock OIDC provider listens on. Default `8080`. |
 | `ICS_POLL_INTERVAL_MINUTES` | How often (min) background jobs poll live ICS URLs. Default 30. |
 | `EVENT_TTL_DAYS` | How many days an event lives before being expired. Default 7. |
 
