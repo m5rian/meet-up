@@ -22,6 +22,8 @@
 	// Cells the user has marked busy in editing mode, keyed by `${rowIdx}:${dayIdx}`.
 	let busyCells = $state<Record<string, boolean>>({});
 	let hovered = $state<{ row: number; day: number } | null>(null);
+	// Viewport position of the pointer, used to place the hover tooltip.
+	let pointer = $state({ x: 0, y: 0 });
 	let saveError = $state<string | null>(null);
 
 	function cellKey(row: number, day: number): string {
@@ -177,7 +179,11 @@
 		</div>
 	{/if}
 
-	<div class="flex flex-col gap-6 lg:flex-row">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="flex flex-col gap-6 lg:flex-row"
+		onmousemove={(e) => (pointer = { x: e.clientX, y: e.clientY })}
+	>
 		<HeatmapGrid
 			{heatmap}
 			{editing}
@@ -195,4 +201,26 @@
 			class="shrink-0 lg:w-56"
 		/>
 	</div>
+
+	{#if hoveredSlotValue && hovered && !editing}
+		{@const slot = hoveredSlotValue}
+		<!-- Flip to the left of the pointer near the right edge so it stays on screen. -->
+		<div
+			role="tooltip"
+			class="pointer-events-none fixed z-20 w-56 rounded-md bg-gray-900 p-3 text-xs text-white shadow-lg"
+			style="top: {pointer.y + 16}px; left: {pointer.x + 16 + 224 > window.innerWidth
+				? pointer.x - 16 - 224
+				: pointer.x + 16}px;"
+		>
+			<div class="mb-2 font-medium">
+				{heatmap.days[hovered.day].label}, {heatmap.rows[hovered.row].label}
+			</div>
+			{#each [{ label: 'Available', people: slot.free }, { label: 'Busy', people: slot.busy }, { label: 'No response', people: slot.not_responded }] as group (group.label)}
+				{#if group.people.length > 0}
+					<div class="mt-1 text-gray-400">{group.label} ({group.people.length})</div>
+					<div class="text-gray-100">{group.people.map((p) => p.username).join(', ')}</div>
+				{/if}
+			{/each}
+		</div>
+	{/if}
 </div>
