@@ -13,7 +13,7 @@
 		busyCells: Record<string, boolean>;
 		onToggle: (row: number, day: number) => void;
 		/** Begin a drag-paint from this cell (editing mode). */
-		onPaintStart: (row: number, day: number) => void;
+		onPaintStart: (row: number, day: number, pointerType: string) => void;
 		/** Extend the active drag-paint to this cell (editing mode). */
 		onPaintMove: (row: number, day: number) => void;
 		onSelect: (row: number, day: number) => void;
@@ -129,8 +129,8 @@
 					onToggle={() => {
 						onToggle(r, d);
 					}}
-					onPaintStart={() => {
-						onPaintStart(r, d);
+					onPaintStart={(pointerType: string) => {
+						onPaintStart(r, d, pointerType);
 					}}
 					onSelect={() => {
 						onSelect(r, d);

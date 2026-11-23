@@ -106,6 +106,46 @@
 		paintTo(row, day);
 	}
 
+	// Touch can't paint on pointerdown: the grid would then swallow every swipe
+	// and the page could not scroll. Instead a tap toggles one cell, a long press
+	// starts a drag, and a swipe scrolls (the browser takes the gesture over and
+	// fires pointercancel, which drops the pending press).
+	const LONG_PRESS_MS = 350;
+	let pressTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingTap: { row: number; day: number } | null = null;
+
+	function pressStart(row: number, day: number, pointerType: string): void {
+		if (pointerType !== 'touch') {
+			paintStart(row, day);
+			return;
+		}
+		pendingTap = { row, day };
+		pressTimer = setTimeout(() => {
+			pendingTap = null;
+			paintStart(row, day);
+		}, LONG_PRESS_MS);
+	}
+
+	function pressEnd(tap: boolean): void {
+		clearTimeout(pressTimer);
+		if (tap && pendingTap) toggleCell(pendingTap.row, pendingTap.day);
+		pendingTap = null;
+		drag = null;
+	}
+
+	// While a touch drag is active, stop the page from scrolling under the finger.
+	// Needs a non-passive listener, which Svelte's ontouchmove attribute is not.
+	$effect(() => {
+		if (!editing) return;
+		const block = (e: TouchEvent) => {
+			if (drag) e.preventDefault();
+		};
+		window.addEventListener('touchmove', block, { passive: false });
+		return () => {
+			window.removeEventListener('touchmove', block);
+		};
+	});
+
 	function paintTo(row: number, day: number): void {
 		if (!drag || drag.last === cellKey(row, day)) return;
 		drag.last = cellKey(row, day);
@@ -165,7 +205,14 @@
 	}
 </script>
 
-<svelte:window onpointerup={() => (drag = null)} onpointercancel={() => (drag = null)} />
+<svelte:window
+	onpointerup={() => {
+		pressEnd(true);
+	}}
+	onpointercancel={() => {
+		pressEnd(false);
+	}}
+/>
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
@@ -222,7 +269,7 @@
 			{selectedStart}
 			{busyCells}
 			onToggle={toggleCell}
-			onPaintStart={paintStart}
+			onPaintStart={pressStart}
 			onPaintMove={paintTo}
 			onSelect={handleSelect}
 			onHover={(row: number, day: number) => (hovered = { row, day })}
