@@ -11,6 +11,8 @@
 		/** The selected final slot as a UTC ISO start timestamp, or null. */
 		selectedStart: string | null;
 		busyCells: Record<string, boolean>;
+		/** True when the member filter is active: zero-available slots render white. */
+		filtered: boolean;
 		onToggle: (row: number, day: number) => void;
 		onSelect: (row: number, day: number) => void;
 		onHover: (row: number, day: number) => void;
@@ -23,6 +25,7 @@
 		selectable,
 		selectedStart,
 		busyCells,
+		filtered,
 		onToggle,
 		onSelect,
 		onHover,
@@ -58,8 +61,12 @@
 			.map(Number)
 			.sort((a, b) => a - b);
 		const map: Record<number, string> = {};
-		sorted.forEach((count, i) => {
-			map[count] = PALETTE[Math.min(i, PALETTE.length - 1)];
+		// In the filter view nobody-free is white and the scale starts one shade
+		// darker, so a single selected person's free slots still stand out.
+		const ranked = filtered ? sorted.filter((count) => count > 0) : sorted;
+		const shift = filtered ? 1 : 0;
+		ranked.forEach((count, i) => {
+			map[count] = PALETTE[Math.min(i + shift, PALETTE.length - 1)];
 		});
 		return map;
 	});

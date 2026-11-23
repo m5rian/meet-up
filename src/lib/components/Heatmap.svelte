@@ -204,6 +204,7 @@
 	<div class="flex flex-col gap-6 lg:flex-row">
 		<HeatmapGrid
 			heatmap={gridHeatmap}
+			filtered={filterIds.size > 0}
 			{editing}
 			selectable={finalizeMode && !editing}
 			{selectedStart}
