@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { DateTime } from 'luxon';
+	import { SvelteSet } from 'svelte/reactivity';
 	import type { HeatmapData, HeatmapSlot } from '$lib/types';
 	import { Button } from './';
 	import { EditIcon, CloseIcon } from './icons';
@@ -23,6 +24,29 @@
 	let busyCells = $state<Record<string, boolean>>({});
 	let hovered = $state<{ row: number; day: number } | null>(null);
 	let saveError = $state<string | null>(null);
+	// Participant ids picked in the member list. When non-empty, the grid only
+	// counts these people, so you can see one person's (or a subgroup's) availability.
+	const filterIds = new SvelteSet<string>();
+
+	function toggleFilter(id: string): void {
+		if (!filterIds.delete(id)) filterIds.add(id);
+	}
+
+	let gridHeatmap = $derived.by((): HeatmapData => {
+		if (filterIds.size === 0) return heatmap;
+		const keep = (p: { id: string }) => filterIds.has(p.id);
+		return {
+			...heatmap,
+			cells: heatmap.cells.map((row) =>
+				row.map((slot) => {
+					const free = slot.free.filter(keep);
+					const busy = slot.busy.filter(keep);
+					const total = free.length + busy.length;
+					return { ...slot, free, busy, free_ratio: total > 0 ? free.length / total : 0 };
+				})
+			)
+		};
+	});
 
 	function cellKey(row: number, day: number): string {
 		return String(row) + ':' + String(day);
@@ -263,7 +287,8 @@
 
 	<div class="flex flex-col gap-6 lg:flex-row">
 		<HeatmapGrid
-			{heatmap}
+			heatmap={gridHeatmap}
+			filtered={filterIds.size > 0}
 			{editing}
 			selectable={finalizeMode && !editing}
 			{selectedStart}
@@ -278,6 +303,11 @@
 		<ParticipantList
 			participants={heatmap.participants}
 			{unavailableIds}
+			selectedIds={filterIds}
+			onToggleSelect={toggleFilter}
+			onClearSelect={() => {
+				filterIds.clear();
+			}}
 			class="shrink-0 lg:sticky lg:top-4 lg:w-56 lg:self-start"
 		/>
 	</div>

@@ -11,6 +11,8 @@
 		/** The selected final slot as a UTC ISO start timestamp, or null. */
 		selectedStart: string | null;
 		busyCells: Record<string, boolean>;
+		/** True when the member filter is active: zero-available slots render white. */
+		filtered: boolean;
 		onToggle: (row: number, day: number) => void;
 		/** Begin a drag-paint from this cell (editing mode). */
 		onPaintStart: (row: number, day: number, pointerType: string) => void;
@@ -27,6 +29,7 @@
 		selectable,
 		selectedStart,
 		busyCells,
+		filtered,
 		onToggle,
 		onPaintStart,
 		onPaintMove,
@@ -51,7 +54,9 @@
 		'bg-green-900'
 	];
 
-	const colorByCount = (() => {
+	// Derived (not computed once) so the scale follows the heatmap prop, e.g.
+	// when the member filter changes which participants are counted.
+	const colorByCount = $derived.by(() => {
 		const counts: Record<number, true> = {};
 		for (const row of heatmap.cells) {
 			for (const cell of row) {
@@ -62,11 +67,15 @@
 			.map(Number)
 			.sort((a, b) => a - b);
 		const map: Record<number, string> = {};
-		sorted.forEach((count, i) => {
-			map[count] = PALETTE[Math.min(i, PALETTE.length - 1)];
+		// In the filter view nobody-free is white and the scale starts one shade
+		// darker, so a single selected person's free slots still stand out.
+		const ranked = filtered ? sorted.filter((count) => count > 0) : sorted;
+		const shift = filtered ? 1 : 0;
+		ranked.forEach((count, i) => {
+			map[count] = PALETTE[Math.min(i + shift, PALETTE.length - 1)];
 		});
 		return map;
-	})();
+	});
 
 	function cellColor(cell: HeatmapSlot): string {
 		return colorByCount[cell.free.length] ?? 'bg-white';
