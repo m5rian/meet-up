@@ -14,6 +14,10 @@
 		/** True when the member filter is active: zero-available slots render white. */
 		filtered: boolean;
 		onToggle: (row: number, day: number) => void;
+		/** Begin a drag-paint from this cell (editing mode). */
+		onPaintStart: (row: number, day: number, pointerType: string) => void;
+		/** Extend the active drag-paint to this cell (editing mode). */
+		onPaintMove: (row: number, day: number) => void;
 		onSelect: (row: number, day: number) => void;
 		onHover: (row: number, day: number) => void;
 		onLeave: () => void;
@@ -27,6 +31,8 @@
 		busyCells,
 		filtered,
 		onToggle,
+		onPaintStart,
+		onPaintMove,
 		onSelect,
 		onHover,
 		onLeave
@@ -87,9 +93,25 @@
 		});
 		return dt.toISO({ suppressMilliseconds: true }) ?? '';
 	}
+
+	// Resolve the cell under the pointer via hit-testing rather than per-cell
+	// pointerenter: touch pointers are implicitly captured by the element they
+	// started on, so enter events never fire on the cells a finger slides over.
+	function handlePointerMove(e: PointerEvent): void {
+		if (!editing) return;
+		const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-cell]');
+		const key = el?.dataset.cell;
+		if (!key) return;
+		const [r, d] = key.split(':').map(Number);
+		onPaintMove(r, d);
+	}
 </script>
 
-<div class="grow overflow-x-auto">
+<div
+	role="presentation"
+	class="grow overflow-x-auto {editing ? 'select-none' : ''}"
+	onpointermove={handlePointerMove}
+>
 	<div
 		class="grid w-full gap-px"
 		style="grid-template-columns: auto repeat({heatmap.days.length}, minmax(0, 1fr));"
@@ -111,9 +133,13 @@
 					{selectable}
 					selected={selectedStart === cellStart(r, d)}
 					busy={busyCells[cellKey(r, d)]}
+					cellKey={cellKey(r, d)}
 					colorClass={cellColor(heatmap.cells[r][d])}
 					onToggle={() => {
 						onToggle(r, d);
+					}}
+					onPaintStart={(pointerType: string) => {
+						onPaintStart(r, d, pointerType);
 					}}
 					onSelect={() => {
 						onSelect(r, d);

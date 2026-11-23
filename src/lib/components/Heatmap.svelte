@@ -107,6 +107,81 @@
 		busyCells[key] = !busyCells[key];
 	}
 
+	// Drag-to-paint: the cell where the drag starts decides the paint value (its
+	// toggled state), and every cell in the rectangle between that anchor and the
+	// pointer is set to it. Painting from a snapshot lets the rectangle shrink
+	// again when the pointer moves back.
+	let drag: {
+		row: number;
+		day: number;
+		value: boolean;
+		base: Record<string, boolean>;
+		last: string;
+	} | null = null;
+
+	function paintStart(row: number, day: number): void {
+		drag = {
+			row,
+			day,
+			value: !busyCells[cellKey(row, day)],
+			base: { ...busyCells },
+			last: ''
+		};
+		paintTo(row, day);
+	}
+
+	// Touch can't paint on pointerdown: the grid would then swallow every swipe
+	// and the page could not scroll. Instead a tap toggles one cell, a long press
+	// starts a drag, and a swipe scrolls (the browser takes the gesture over and
+	// fires pointercancel, which drops the pending press).
+	const LONG_PRESS_MS = 350;
+	let pressTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingTap: { row: number; day: number } | null = null;
+
+	function pressStart(row: number, day: number, pointerType: string): void {
+		if (pointerType !== 'touch') {
+			paintStart(row, day);
+			return;
+		}
+		pendingTap = { row, day };
+		pressTimer = setTimeout(() => {
+			pendingTap = null;
+			paintStart(row, day);
+		}, LONG_PRESS_MS);
+	}
+
+	function pressEnd(tap: boolean): void {
+		clearTimeout(pressTimer);
+		if (tap && pendingTap) toggleCell(pendingTap.row, pendingTap.day);
+		pendingTap = null;
+		drag = null;
+	}
+
+	// While a touch drag is active, stop the page from scrolling under the finger.
+	// Needs a non-passive listener, which Svelte's ontouchmove attribute is not.
+	$effect(() => {
+		if (!editing) return;
+		const block = (e: TouchEvent) => {
+			if (drag) e.preventDefault();
+		};
+		window.addEventListener('touchmove', block, { passive: false });
+		return () => {
+			window.removeEventListener('touchmove', block);
+		};
+	});
+
+	function paintTo(row: number, day: number): void {
+		if (!drag || drag.last === cellKey(row, day)) return;
+		drag.last = cellKey(row, day);
+		const next = { ...drag.base };
+		for (let r = Math.min(drag.row, row); r <= Math.max(drag.row, row); r++) {
+			for (let d = Math.min(drag.day, day); d <= Math.max(drag.day, day); d++) {
+				next[cellKey(r, d)] = drag.value;
+			}
+		}
+		busyCells = next;
+	}
+
 	// Compute the manual override deltas and submit them.
 	function onSave(event: SubmitEvent): void {
 		const auto = autoBusyCells();
@@ -153,6 +228,15 @@
 		onSelectSlot(start, end);
 	}
 </script>
+
+<svelte:window
+	onpointerup={() => {
+		pressEnd(true);
+	}}
+	onpointercancel={() => {
+		pressEnd(false);
+	}}
+/>
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
@@ -210,6 +294,8 @@
 			{selectedStart}
 			{busyCells}
 			onToggle={toggleCell}
+			onPaintStart={pressStart}
+			onPaintMove={paintTo}
 			onSelect={handleSelect}
 			onHover={(row: number, day: number) => (hovered = { row, day })}
 			onLeave={() => (hovered = null)}
@@ -222,7 +308,7 @@
 			onClearSelect={() => {
 				filterIds.clear();
 			}}
-			class="shrink-0 lg:w-56"
+			class="shrink-0 lg:sticky lg:top-4 lg:w-56 lg:self-start"
 		/>
 	</div>
 </div>
