@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import type { HeatmapData, UserSummary } from '$lib/types';
 	import { Button, Heatmap, InvitePicker } from '$lib/components';
+	import { EditIcon } from '$lib/components/icons';
 
 	interface EventDetail {
 		slug: string;
@@ -40,14 +41,32 @@
 
 	const downloadUrl = $derived(resolve(`/events/${data.event.slug}/invite.ics`));
 
+	// The finalize form, submitted directly when the organizer picks a cell so
+	// selecting a slot immediately finalizes the meeting (no extra click).
+	let finalizeForm: HTMLFormElement | undefined = $state();
+
+	// True when the organizer is editing an already-finalized meeting time.
+	let editingFinalized = $state(false);
+
 	function startFinalize(): void {
 		finalizeMode = true;
+		editingFinalized = false;
+		selectedStart = null;
+		selectedEnd = null;
+	}
+
+	// Re-enter finalize mode to change an already-finalized slot. The finalize
+	// action overwrites the existing time, so picking a new cell updates it.
+	function editFinalized(): void {
+		finalizeMode = true;
+		editingFinalized = true;
 		selectedStart = null;
 		selectedEnd = null;
 	}
 
 	function cancelFinalize(): void {
 		finalizeMode = false;
+		editingFinalized = false;
 		selectedStart = null;
 		selectedEnd = null;
 	}
@@ -55,6 +74,16 @@
 	function onSelectSlot(start: string, end: string): void {
 		selectedStart = start;
 		selectedEnd = end;
+		// Set the hidden inputs before submitting so the form always carries the
+		// freshly picked cell, then finalize immediately (no extra click).
+		if (finalizeForm) {
+			const f = finalizeForm;
+			const startInput = f.querySelector<HTMLInputElement>('input[name="start_ts"]');
+			const endInput = f.querySelector<HTMLInputElement>('input[name="end_ts"]');
+			if (startInput) startInput.value = start;
+			if (endInput) endInput.value = end;
+			f.requestSubmit();
+		}
 	}
 
 	let selectedLabel = $derived.by(() => {
@@ -123,7 +152,7 @@
 		</section>
 	{/if}
 
-	{#if isFinalized}
+	{#if isFinalized && !(data.isOrganizer && editingFinalized)}
 		<section class="rounded-lg border border-green-200 bg-green-50 p-4 shadow-sm">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
@@ -133,14 +162,24 @@
 						{data.event.finalized_end_ts ? formatFinalized(data.event.finalized_end_ts) : ''}
 					</p>
 				</div>
-				<a href={downloadUrl}>
-					<Button type="button" variant="secondary">Add to calendar (.ics)</Button>
-				</a>
+				<div class="flex items-center gap-2">
+					{#if data.isOrganizer}
+						<Button type="button" variant="secondary" onclick={editFinalized}>
+							<EditIcon class="h-4 w-4" />
+							Edit
+						</Button>
+					{/if}
+					<a href={downloadUrl}>
+						<Button type="button" variant="secondary">Add to calendar (.ics)</Button>
+					</a>
+				</div>
 			</div>
 		</section>
 	{:else if data.isOrganizer}
 		<section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-			<h2 class="mb-3 text-sm font-semibold text-gray-900">Finalize the meeting</h2>
+			<h2 class="mb-3 text-sm font-semibold text-gray-900">
+				{editingFinalized ? 'Change the meeting time' : 'Finalize the meeting'}
+			</h2>
 			{#if !finalizeMode}
 				<p class="mb-3 text-sm text-gray-500">
 					Pick a slot on the heatmap to set the meeting time. It must fall inside the availability
@@ -149,23 +188,41 @@
 				<Button type="button" onclick={startFinalize}>Choose a slot</Button>
 			{:else}
 				<p class="mb-3 text-sm text-gray-500">
-					Click a cell on the heatmap to pick the meeting time.
+					Click a cell on the heatmap to set the meeting time. The chosen slot is finalized
+					immediately and shown to everyone.
 				</p>
 				<div class="flex flex-wrap items-center gap-3">
 					{#if selectedLabel}
 						<span class="rounded-md bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800">
 							{selectedLabel}
 						</span>
-						<form method="POST" action="?/finalize" use:enhance class="contents">
-							<input type="hidden" name="start_ts" value={selectedStart ?? ''} />
-							<input type="hidden" name="end_ts" value={selectedEnd ?? ''} />
-							<Button type="submit">Finalize meeting</Button>
-						</form>
 					{:else}
 						<p class="text-sm text-gray-400">No slot selected yet.</p>
 					{/if}
 					<Button type="button" variant="secondary" onclick={cancelFinalize}>Cancel</Button>
 				</div>
+				<form
+					bind:this={finalizeForm}
+					method="POST"
+					action="?/finalize"
+					use:enhance={() => {
+						return ({ result, update }) => {
+							if (result.type === 'success') {
+								// Finalized: leave finalize mode and re-run the loaders so the page
+								// reflects the finalized slot (banner + blue mark + auto-scroll).
+								finalizeMode = false;
+								editingFinalized = false;
+								selectedStart = null;
+								selectedEnd = null;
+								return update({ invalidateAll: true });
+							}
+						};
+					}}
+					class="hidden"
+				>
+					<input type="hidden" name="start_ts" value={selectedStart ?? ''} />
+					<input type="hidden" name="end_ts" value={selectedEnd ?? ''} />
+				</form>
 			{/if}
 			{#if data.finalizeError}
 				<p class="mt-3 text-sm text-red-600">{data.finalizeError}</p>

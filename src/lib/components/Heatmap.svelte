@@ -222,8 +222,25 @@
 	});
 
 	// When in finalize mode, clicking a cell reports its UTC interval upward.
+	// Only cells inside the organizer's availability window are selectable.
+	const windowRange = $derived.by(() => {
+		const w = heatmap.organizer_window;
+		if (!w) return null;
+		return { start: w.start_offset_minutes, end: w.end_offset_minutes };
+	});
+
+	function isInWindow(row: number): boolean {
+		if (!windowRange) return true;
+		const r = heatmap.rows[row];
+		return (
+			r.offset_minutes >= windowRange.start &&
+			r.offset_minutes + r.duration_minutes <= windowRange.end
+		);
+	}
+
 	function handleSelect(row: number, day: number): void {
 		if (!finalizeMode || !onSelectSlot) return;
+		if (!isInWindow(row)) return;
 		const [start, end] = cellInterval(row, day);
 		onSelectSlot(start, end);
 	}
@@ -292,6 +309,8 @@
 			{editing}
 			selectable={finalizeMode && !editing}
 			{selectedStart}
+			finalizedStart={gridHeatmap.finalized_start_ts}
+			{windowRange}
 			{busyCells}
 			onToggle={toggleCell}
 			onPaintStart={pressStart}

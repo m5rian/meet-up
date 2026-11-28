@@ -116,6 +116,10 @@ export interface OrganizerWindow {
 	end_label: string;
 	/** Human-readable reference, e.g. '9:00 AM – 6:00 PM EDT'. */
 	reference_label: string;
+	/** The window's start offset in minutes from viewer-local midnight, aligned to grid row offsets. */
+	start_offset_minutes: number;
+	/** The window's end offset in minutes from viewer-local midnight, aligned to grid row offsets. */
+	end_offset_minutes: number;
 }
 
 /** The fully-shaped data the heatmap component renders. */
@@ -150,4 +154,6 @@ export interface HeatmapData {
 	my_calendar_blocks: [string, string][];
 	/** The current user's final busy blocks for this event (union minus manual free). */
 	my_busy_blocks: [string, string][];
+	/** The finalized meeting's start timestamp (UTC ISO), or null when not yet finalized. */
+	finalized_start_ts: string | null;
 }

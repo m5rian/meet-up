@@ -314,7 +314,8 @@ export function buildHeatmap(event: EventRow, viewerId: string, viewerTzId: stri
 		my_manual_free: myManualFree.map((b) => [b.start_ts, b.end_ts]),
 		my_sleep_blocks: mySleepBlocks.map((b) => [b.start_ts, b.end_ts]),
 		my_calendar_blocks: myCalendarBlocks.map((b) => [b.start_ts, b.end_ts]),
-		my_busy_blocks: myBusyBlocks.map((b) => [b.start_ts, b.end_ts])
+		my_busy_blocks: myBusyBlocks.map((b) => [b.start_ts, b.end_ts]),
+		finalized_start_ts: event.finalized_start_ts
 	};
 }
 
@@ -411,10 +412,20 @@ function buildOrganizerWindow(
 	const refStart = formatTime12InZone(start_ts, event.tz_id);
 	const refEnd = formatTime12InZone(end_ts, event.tz_id);
 	const tzShort = tzShortName(event.tz_id, start_ts);
+	// The window's position in the viewer's local day, aligned to grid row
+	// offsets (minutes from the viewer's local midnight of the reference date).
+	// Both are concrete instants, so this stays correct across DST.
+	const viewerMidnight = DateTime.fromISO(localToUtc(refDate, '00:00:00', viewerTzId));
+	const startOffset = Math.round(
+		DateTime.fromISO(start_ts).diff(viewerMidnight, 'minutes').minutes
+	);
+	const endOffset = Math.round(DateTime.fromISO(end_ts).diff(viewerMidnight, 'minutes').minutes);
 	return {
 		start_label: startLabel,
 		end_label: endLabel,
-		reference_label: `${refStart} – ${refEnd} ${tzShort}`
+		reference_label: `${refStart} – ${refEnd} ${tzShort}`,
+		start_offset_minutes: startOffset,
+		end_offset_minutes: endOffset
 	};
 }
 

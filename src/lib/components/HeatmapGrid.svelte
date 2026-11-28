@@ -10,6 +10,10 @@
 		selectable: boolean;
 		/** The selected final slot as a UTC ISO start timestamp, or null. */
 		selectedStart: string | null;
+		/** The finalized meeting's start timestamp (UTC ISO), or null. Marked blue for everyone. */
+		finalizedStart: string | null;
+		/** The organizer window's [start,end] minute offsets (from viewer midnight), or null. */
+		windowRange: { start: number; end: number } | null;
 		busyCells: Record<string, boolean>;
 		/** True when the member filter is active: zero-available slots render white. */
 		filtered: boolean;
@@ -28,6 +32,8 @@
 		editing,
 		selectable,
 		selectedStart,
+		finalizedStart,
+		windowRange,
 		busyCells,
 		filtered,
 		onToggle,
@@ -94,6 +100,17 @@
 		return dt.toISO({ suppressMilliseconds: true }) ?? '';
 	}
 
+	// Whether a grid row falls within the organizer's availability window. When no
+	// window is known, every row is allowed (e.g. for the editing overlay).
+	function rowInWindow(row: number): boolean {
+		if (!windowRange) return true;
+		const r = heatmap.rows[row];
+		return (
+			r.offset_minutes >= windowRange.start &&
+			r.offset_minutes + r.duration_minutes <= windowRange.end
+		);
+	}
+
 	// Resolve the cell under the pointer via hit-testing rather than per-cell
 	// pointerenter: touch pointers are implicitly captured by the element they
 	// started on, so enter events never fire on the cells a finger slides over.
@@ -105,6 +122,17 @@
 		const [r, d] = key.split(':').map(Number);
 		onPaintMove(r, d);
 	}
+
+	// When a meeting is finalized, scroll its cell into the center of the screen
+	// so everyone sees it. Scroll once per finalized slot (keyed by its start ts).
+	let scrolledFinalized = $state<string | null>(null);
+	$effect(() => {
+		const start = finalizedStart;
+		if (!start || start === scrolledFinalized) return;
+		scrolledFinalized = start;
+		const el = document.querySelector<HTMLElement>(`[data-finalized="${start}"]`);
+		el?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+	});
 </script>
 
 <div
@@ -124,14 +152,19 @@
 		{/each}
 
 		{#each heatmap.rows as row, r (row.offset_minutes)}
+			{@const inWindow = rowInWindow(r)}
 			<div class="sticky left-0 bg-white px-2 py-1 text-right text-xs font-medium text-gray-500">
 				{row.label}
 			</div>
 			{#each heatmap.days as day, d (day.date)}
+				{@const start = cellStart(r, d)}
 				<HeatmapCell
 					{editing}
 					{selectable}
-					selected={selectedStart === cellStart(r, d)}
+					outOfWindow={selectable && !inWindow}
+					selected={selectedStart === start}
+					finalized={finalizedStart !== null && finalizedStart === start}
+					finalizedKey={finalizedStart !== null && finalizedStart === start ? start : undefined}
 					busy={busyCells[cellKey(r, d)]}
 					cellKey={cellKey(r, d)}
 					colorClass={cellColor(heatmap.cells[r][d])}
